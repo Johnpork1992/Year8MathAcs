@@ -356,6 +356,7 @@ const Snd=(()=>{
   tension(p){if(amb&&ac)amb.lp.frequency.setTargetAtTime(150+p*260,ac.currentTime,.4)},
   step(sprint,vol,pan){const v=vol===undefined?1:vol;noise(.09,(sprint?.18:.1)*v,'lowpass',sprint?900:560,.8,0,pan)},
   splash(vol,pan){noise(.16,.16*vol,'lowpass',720,1.4,0,pan,220);noise(.09,.07*vol,'highpass',1800,1.2,.025,pan,900)},
+  drill(){tone(85,'sawtooth',.22,.11,60);noise(.2,.14,'bandpass',1200,3,0,0,800)},
   clink(){tone(2300,'triangle',.35,.08);tone(3300,'sine',.28,.05,0,.04)},
   drip(pan,vol){tone(1400,'sine',.12,.035*vol,500,0,pan)},
   heart(vol){tone(62,'sine',.16,.55*vol,38);tone(54,'sine',.18,.4*vol,34,.17)},
@@ -453,6 +454,7 @@ const PAL={
  MINER:{suit:'#4a4d3f',vest:'#7d7a52',helmet:'#aaa07a',boots:'#1d1e19',skin:'#8f8670'}
 };
 let map,reach,floorList,wallFaces,mapC,overC,decC,dctx;
+let drilled=new Set(),drillC=null,drill=null;
 let player,monster,bodies,gold,tags,exit,bots,lanterns,rats,puddles,ores,particles,explored,floodedTiles=[];
 let pitTiles=[],pitSet=new Set(),mineVeins=[];
 
@@ -536,6 +538,7 @@ let worldSeedForVisuals=0;
 let brightBoost=0; // 0 off, 1 mild, 2 strong — accessibility for dim screens
 let silver=0,runUpgrades={},shopOpen=false,shopReady=false,shopReadyMap={},shopFloorBonus={eg:0,et:0,silver:0},shopBranch='BODY',shopOpenedAt=0,shopTick=0,shopFootT=0,charmReady=false;
 let deathKind='monster',phase='menu',paused=false,last=0,elapsed=0,noise=0,flashlightOn=true,shake=0,hintT=0,alertT=0,hbT=0,heartPulse=0,rumbleT=40,knockT=25,growlT=12,liftOpen=0,endT=0,miniT=0,exploreT=0,showMini=true,endWin=false,painting=null,prevPainting=false,fxClock=0,whT=8,breathT=0,puzzle=null,lastQuota=false,depth=1,quotaGold=6,quotaTags=3;
+let mgT=0,mgSpin=0,netMgBuf=[],netMgSeq=0,netMgSeen={},mgHitSnd=0,forestAnnounced=false;
 let rifleAnim=null,rifleReloadT=0,rifleClackT=0,netShot=null,netShotSeq=0,netShotSeen={},netShotAnim={};
 let abilityFx=[],abilityCooldowns={},abilityScanT=0,abilityScanRange=0,abilitySpeedT=0,abilitySpeedMult=1,abilityAlarmT=0,abilityHudCache='';
 let rocks=[],spores=[],battery=100,sporeAmt=0,coughT=1,rockT=3.5,bellN=0,bellFlash=0,bellPing=0,blackOn=0,blackWarn=false;
@@ -572,7 +575,7 @@ function say(t,d){hintT=d||2;setText('hint',t)}
 function showAlert(t){$('alert').textContent=t;alertT=1.5}
 
 /* ---------- map ---------- */
-const walk=(x,y,allowPits=false)=>{const tx=Math.floor(x/TILE),ty=Math.floor(y/TILE);return tx>=0&&ty>=0&&tx<COLS&&ty<ROWS&&map[ty][tx]===0&&(allowPits||!pitSet.has(ty*COLS+tx))};
+const walk=(x,y,allowPits=false)=>{const tx=Math.floor(x/TILE),ty=Math.floor(y/TILE);return tx>=0&&ty>=0&&tx<COLS&&ty<ROWS&&(map[ty][tx]===0||(allowPits&&drilled.has(ty*COLS+tx)))&&(allowPits||!pitSet.has(ty*COLS+tx))};
 const blocked=(x,y,r,allowPits=false)=>!walk(x-r,y-r,allowPits)||!walk(x+r,y-r,allowPits)||!walk(x-r,y+r,allowPits)||!walk(x+r,y+r,allowPits);
 function inFlood(x,y){return !!floodedTiles&&floodedTiles.some(c=>c.x===Math.floor(x/TILE)&&c.y===Math.floor(y/TILE))}
 function moveEntity(e,dx,dy,r){const allowPits=e===player;if(!blocked(e.x+dx,e.y,r,allowPits))e.x+=dx;if(!blocked(e.x,e.y+dy,r,allowPits))e.y+=dy}
@@ -904,7 +907,7 @@ function setup(){
  monster={x:(sp.x+.5)*TILE,y:(sp.y+.5)*TILE,r:14,state:'stalk',path:null,pi:0,repath:0,fx:0,fy:1,ang:Math.PI/2,t:0,lastSeen:null,search:0,huntT:'player',host:null,disguise:null,dT:0,stuck:0,gait:0,mv:0,revealed:false,pause:0,wCool:0};
  noise=0;elapsed=0;shake=0;hintT=0;alertT=0;hbT=1;heartPulse=0;liftOpen=0;endT=0;painting=null;prevPainting=false;puzzle=null;lastQuota=false;whT=8;breathT=0;
  rumbleT=rnd(30,50);knockT=rnd(18,32);growlT=rnd(10,18);
- flashlightOn=true;mmNewLevel();rocks=[];spores=[];battery=100;sporeAmt=0;coughT=1;rockT=3.5;bellN=0;bellFlash=0;bellPing=0;blackOn=0;blackWarn=false;vents=[];quakeAmt=0;quakeWarned=false;quakePulse=0;coldShiver=0;idleT=0;
+ flashlightOn=true;mmNewLevel();rocks=[];spores=[];battery=100;sporeAmt=0;coughT=1;rockT=3.5;bellN=0;bellFlash=0;bellPing=0;drilled=new Set();drillC=null;drill=null;blackOn=0;blackWarn=false;vents=[];quakeAmt=0;quakeWarned=false;quakePulse=0;coldShiver=0;idleT=0;
  if(gim('gas')){const n=Math.min(9,4+Math.floor(depth/2));for(let i=0;i<n;i++){let p=null;for(let t=0;t<12;t++){const c=randomFloor(200,player.x,player.y);if(Math.hypot(c.x-exit.x,c.y-exit.y)<170)continue;p=c;break}if(!p)p=randomFloor(200,player.x,player.y);vents.push({x:p.x,y:p.y,off:rnd(0,10),k:0,warn:false,hissed:false})}}
  if(gim('spores')){const n=6+Math.min(6,depth);for(let i=0;i<n;i++){let p=null;for(let t=0;t<12;t++){const c=randomFloor(230,player.x,player.y);if(Math.hypot(c.x-exit.x,c.y-exit.y)<150)continue;p=c;break}if(!p)p=randomFloor(230,player.x,player.y);spores.push({bx:p.x,by:p.y,a:rnd(18,46),s:rnd(.22,.5),ph:rnd(0,TAU),r:rnd(62,92),p:{x:p.x,y:p.y}})}}
  applyRunUpgradeEffects();
@@ -1153,6 +1156,10 @@ const UPS=[
  U('a10b','ABILITIES',2,10,['a10'],26,'HOLLOW POINTS','The creature dies after 8 hits instead of 10.','stack',[]),
  U('a10c','ABILITIES',3,10,['a10b'],40,'ARMOR PIERCING','The creature dies after just 7 hits.','arrow',[]),
  U('a10f','ABILITIES',4,10,['a10c'],70,'DEADEYE ROUNDS','The creature dies after just 5 hits.','rifle',[]),
+ U('a11','ABILITIES',1,11,[],45,'DRILL','Face a wall and drill a tunnel through it. It takes 20 seconds, is deafening, and the creature knows exactly where you are the whole time. Only you can use the tunnel.','drill',[]),
+ U('a11a','ABILITIES',2,11,['a11'],30,'TUNGSTEN BIT','Drilling takes 15 seconds instead of 20.','bolt',[]),
+ U('a11b','ABILITIES',3,11,['a11a'],55,'DIAMOND BIT','Drilling takes just 10 seconds.','stack',[]),
+ U('a11c','ABILITIES',2,12,['a11'],28,'COOLANT LINES','The drill recharges 10 seconds faster.','wave',[]),
  U('a10d','ABILITIES',3,9,['a10a'],28,'SUPPRESSOR','Shots are half as loud, and a miss only gives you away for 1 second.','ghost',[]),
  U('a10e','ABILITIES',4,9,['a10d'],34,'MATCH GRADE ACTION','The wait after reloading drops from 60 to 40 seconds.','pulse',[]),
  U('w1','WORK',1,0,[],60,'THIRD SLOT','Carry a third ability. Press 3 to use it.','abilities',[]),
@@ -1165,7 +1172,7 @@ const UPS=[
 ];
 const ABILITY_DEFS=[
  {id:'pickaxe',node:'a1',name:'PICKAXE',cooldown:.55},{id:'flare',node:'a2',name:'FLARE',cooldown:17},{id:'decoy',node:'a3',name:'NOISE DECOY',cooldown:22},{id:'scanner',node:'a4',name:'SEISMIC SCANNER',cooldown:20},
- {id:'medkit',node:'a5',name:'EMERGENCY WRAP',cooldown:26},{id:'smoke',node:'a6',name:'SMOKE BOMB',cooldown:22},{id:'tripwire',node:'a7',name:'TRIPWIRE',cooldown:24},{id:'stimulant',node:'a8',name:'STIMULANT',cooldown:22},{id:'flash',node:'a9',name:'FLASH BEAM',cooldown:20},{id:'rifle',node:'a10',name:'RIFLE',cooldown:70}
+ {id:'medkit',node:'a5',name:'EMERGENCY WRAP',cooldown:26},{id:'smoke',node:'a6',name:'SMOKE BOMB',cooldown:22},{id:'tripwire',node:'a7',name:'TRIPWIRE',cooldown:24},{id:'stimulant',node:'a8',name:'STIMULANT',cooldown:22},{id:'flash',node:'a9',name:'FLASH BEAM',cooldown:20},{id:'rifle',node:'a10',name:'RIFLE',cooldown:70},{id:'drill',node:'a11',name:'DRILL',cooldown:30}
 ];
 const ABILITY_BASE_IDS=new Set(ABILITY_DEFS.map(a=>a.node));
 const N=id=>runUpgrades[id]?1:0;
@@ -1479,7 +1486,9 @@ function netProcessFlashes(){
  for(const p of netPlayers){
   if(!p||p.id===netMyId)continue;
   if(isNetHost&&p.stun&&typeof p.stun==='object'){const sn=Number(p.stun.n);if(sn>(netStunSeen[p.id]||0)){netStunSeen[p.id]=sn;if(p.stun.rid===netRoundId&&p.stun.dp===depth&&monster&&monster.state!=='possess'){monster.pause=Math.max(monster.pause||0,clamp(+p.stun.s||1,.2,3));monster.path=null}}}
-  if(p.shot&&typeof p.shot==='object'){const sh=p.shot,sn=Number(sh.n);if(sn>(netShotSeen[p.id]||0)){netShotSeen[p.id]=sn;if(sh.rid===netRoundId&&sh.dp===depth){const sx=+sh.x,sy=+sh.y,sa=+sh.a;if([sx,sy,sa].every(Number.isFinite)){const range=clamp(+sh.r||900,200,1400);rifleShotFx(sx,sy,sa,range,false);netShotAnim[p.id]=performance.now()-RIFLE_FIRE_AT*1000;if(isNetHost)rifleResolve(sx,sy,sa,p.id,{range,stun:clamp(+sh.s||7,1,10),need:clamp(Math.round(+sh.nd||10),5,12),pin:clamp(+sh.pn||2,.5,3),quiet:sh.q?1:0})}}}}
+  if(isNetHost&&p.drill===true&&!monster.dead&&monster.state!=='possess'&&Number.isFinite(p.x)&&Number.isFinite(p.y)&&(monster.nextDrillPing||0)<=elapsed){monster.nextDrillPing=elapsed+.6;monster.state='investigate';monster.lastSeen={x:p.x,y:p.y};monster.search=Math.max(monster.search||0,4);monster.path=null}
+ if(Array.isArray(p.mg)){let cnt=0;for(const b of p.mg){if(cnt>=10)break;const bn=Number(b&&b.n);if(!(bn>(netMgSeen[p.id]||0)))continue;netMgSeen[p.id]=bn;cnt++;if(b.rid!==netRoundId||b.dp!==depth)continue;const sx=+b.x,sy=+b.y,sa=+b.a;if(![sx,sy,sa].every(Number.isFinite))continue;mgFx(sx,sy,sa,MG.range,false);netShotAnim[p.id]=performance.now()-RIFLE_FIRE_AT*1000;if(isNetHost)rifleResolve(sx,sy,sa,p.id,MG)}}
+ if(p.shot&&typeof p.shot==='object'){const sh=p.shot,sn=Number(sh.n);if(sn>(netShotSeen[p.id]||0)){netShotSeen[p.id]=sn;if(sh.rid===netRoundId&&sh.dp===depth){const sx=+sh.x,sy=+sh.y,sa=+sh.a;if([sx,sy,sa].every(Number.isFinite)){const range=clamp(+sh.r||900,200,1400);rifleShotFx(sx,sy,sa,range,false);netShotAnim[p.id]=performance.now()-RIFLE_FIRE_AT*1000;if(isNetHost)rifleResolve(sx,sy,sa,p.id,{range,stun:clamp(+sh.s||7,1,10),need:clamp(Math.round(+sh.nd||10),5,12),pin:clamp(+sh.pn||2,.5,3),quiet:sh.q?1:0})}}}}
   if(!p.flash||typeof p.flash!=='object')continue;
   const fl=p.flash,n=Number(fl.n);if(!(n>(netFlashSeen[p.id]||0)))continue;
   netFlashSeen[p.id]=n;
@@ -1529,6 +1538,38 @@ function rifleShotFx(ox,oy,ang,range,own){
  try{Snd.rifleShot(clamp((ox-player.x)/500,-1,1))}catch(e){}
  if(own)shake=Math.max(shake,5);
 }
+const FOREST_NAME='forestisthebest',MG={range:900,stun:1.4,need:40,pin:.5,quiet:0,mg:true};
+function nameIsForest(n){return String(n||'').toLowerCase().replace(/[^a-z]/g,'')===FOREST_NAME}
+function forestMode(){return multiplayer&&(nameIsForest(netName)||(netPlayers||[]).some(p=>p&&nameIsForest(p.name)))}
+function rifleCarried(){return N('a10')>0||forestMode()}
+function mgPose(){return forestMode()&&mgSpin>.08?Math.min(1,mgSpin*2):0}
+function mgRecoil(){return forestMode()&&mgSpin>.5&&Math.sin(fxClock*80)>0?.55:0}
+function mgFx(ox,oy,ang,range,own){
+ const ux=Math.cos(ang),uy=Math.sin(ang),mx=ox+ux*30,my=oy+uy*30,len=rayLen(ox+ux*14,oy+uy*14,ang,range)+14,ex=ox+ux*len,ey=oy+uy*len;
+ abilityFx.push({type:'muzzle',x:mx,y:my,ang,t:.06,max:.06});
+ abilityFx.push({type:'tracer',x:mx,y:my,ex,ey,t:.09,max:.09});
+ for(let i=0;i<2;i++){const a=ang+rnd(-.4,.4),sp=rnd(60,200);P(mx,my,Math.cos(a)*sp,Math.sin(a)*sp,rnd(.12,.3),rnd(1,1.6),i%2?'#ffe0a0':'#ff8a3c',{drag:.9})}
+ P(ox-uy*8,oy+ux*8,uy*rnd(60,120)+rnd(-10,10),-ux*rnd(60,120)+rnd(-10,10),.6,1.6,'#d9b24c',{drag:.9});
+ if(len<range-8)P(ex,ey,rnd(-60,60)-ux*40,rnd(-60,60)-uy*40,rnd(.12,.3),1.3,'#ffd98a',{drag:.88});
+ const now=performance.now();if(now-mgHitSnd>85){mgHitSnd=now;try{Snd.rifleShot(clamp((ox-player.x)/500,-1,1))}catch(e){}}
+ if(own)shake=Math.max(shake,2.2);
+}
+function fireMinigunBullet(){
+ const ang=(player.aim||0)+rnd(-.06,.06),ox=player.x,oy=player.y;
+ mgFx(ox,oy,ang,MG.range,true);noise=Math.max(noise,85);
+ netMgBuf.push({n:++netMgSeq,x:Math.round(ox),y:Math.round(oy),a:Math.round(ang*1000)/1000,rid:netRoundId,dp:depth,t:performance.now()});if(netMgBuf.length>10)netMgBuf.shift();
+ if(!multiplayer||isNetHost)rifleResolve(ox,oy,ang,multiplayer?netMyId:null,MG);
+}
+function updateMinigun(dt){
+ const on=forestMode();
+ if(on&&!forestAnnounced&&phase==='play'){forestAnnounced=true;showAlert('FOREST IS IN THE LOBBY');say('Everyone has a minigun. HOLD LEFT CLICK or G to fire.',5)}
+ if(!on){forestAnnounced=false;mgSpin=0;return}
+ const nowT=performance.now();if(netMgBuf.length&&nowT-netMgBuf[netMgBuf.length-1].t>900)netMgBuf=[];
+ mgT=Math.max(0,mgT-dt);
+ const want=!!(keys.mouse0||keys.g)&&player&&phase==='play'&&!paused&&!puzzle&&!isMonsterController&&netAlive&&!drill&&!((player.pitFallT||0)>0);
+ mgSpin=lerp(mgSpin,want?1:0,Math.min(1,dt*(want?3.5:2)));
+ if(want&&mgSpin>.55){let n=0;while(mgT<=0&&n++<3){fireMinigunBullet();mgT+=1/16}}
+}
 function pinTarget(m){
  if(m.pinId==null||m.pinId===netMyId){if(multiplayer&&!netAlive)return null;return{...player,id:netMyId,netId:netMyId,name:netName,flashlightOn,noise,isLocal:true}}
  const p=(netPlayers||[]).find(q=>q.id===m.pinId&&q.alive!==false&&Number.isFinite(q.x));return p?{...p,netId:p.id,isLocal:false}:null;
@@ -1549,8 +1590,9 @@ function rifleHit(p,shooterId){
  if(m.state==='disguise'){try{reveal(netMonsterTarget(m))}catch(e){}}
  m.stunT=Math.max(m.stunT||0,p.stun);m.pause=Math.max(m.pause||0,p.stun);m.path=null;m.pinT=0;m.hits=(m.hits||0)+1;
  for(let i=0;i<14;i++)P(m.x,m.y-4,rnd(-130,130),rnd(-130,130),rnd(.25,.6),rnd(1.3,2.4),i%3?'#7a1a14':'#d9d1b4',{drag:.9});
- try{Snd.rifleHit()}catch(e){}
+ {const nh=performance.now();if(!p.mg||nh-mgHitSnd>85){try{Snd.rifleHit()}catch(e){}}}
  if(m.hits>=p.need){killMonster();return}
+ if(p.mg){if(m.hits%10===0)say(`MINIGUN · ${m.hits} / ${p.need} hits to kill it.`,1.6);return}
  showAlert('DIRECT HIT');say(`HIT · The creature is stunned for ${Math.round(p.stun)} seconds · ${m.hits} / ${p.need} hits to kill it.`,3.2);
 }
 function rifleMiss(p,shooterId){
@@ -1558,6 +1600,7 @@ function rifleMiss(p,shooterId){
  m.pinT=Math.max(m.pinT||0,p.pin);m.pinId=shooterId;
  if(m.state==='disguise'){try{reveal(netMonsterTarget(m))}catch(e){}}
  if(!(multiplayer&&netMonsterControllerId)){m.state='hunt';m.huntT='player';m.path=null;m.repath=0;m.search=4}
+ if(p.mg)return;
  showAlert('IT KNOWS WHERE YOU ARE');say(`MISSED · That was loud. The creature knows exactly where the shot came from for ${p.pin} second${p.pin>1?'s':''}.`,3.2);
 }
 function rifleResolve(ox,oy,ang,shooterId,p){
@@ -1596,6 +1639,7 @@ function drawPinMarker(camX,camY){
 function useAbility(slot){
  if(!player||phase!=='play'||paused||isMonsterController||puzzle)return;
  const a=ownedAbilities()[slot-1];if(!a){say(`No ability in slot ${slot}. Buy abilities in the ABILITIES tree (limit ${abilityCap()}).`,2);return}
+ if(a.id==='drill'&&drill){cancelDrill();return}
  const cd=abilityCooldowns[a.id]||0;if(cd>0){say(`${a.name} recharges in ${cd.toFixed(1)}s.`,1.1);return}
  let cooldown=a.cooldown,point;
  if(a.id==='pickaxe'){
@@ -1620,6 +1664,8 @@ function useAbility(slot){
  }else if(a.id==='rifle'){
   if(rifleAnim||rifleReloadT>0||(player.pitFallT||0)>0)return;
   rifleAnim={t:0,fired:false};cooldown=(10-4*N('a10a'))+(60-20*N('a10e'))+.9;say('RIFLE · Shouldering…',1.2);
+ }else if(a.id==='drill'){
+  startDrill();return;
  }else if(a.id==='flash'){
   fireFlash();cooldown=20;
  }else if(a.id==='stimulant'){
@@ -1628,7 +1674,95 @@ function useAbility(slot){
  if(N('w6')&&a.id!=='pickaxe'&&a.id!=='rifle')noise=Math.min(100,noise+28);
  abilityCooldowns[a.id]=(a.id==='rifle'||a.id==='pickaxe')?cooldown:cooldown*abCdMult();renderAbilityHud();
 }
+function drillSeconds(){return 20-5*N('a11a')-5*N('a11b')}
+function drillCooldown(){return (30-10*N('a11c'))*abCdMult()}
+function startDrill(){
+ if(drill||rifleAnim||(player.pitFallT||0)>0||(player.stun||0)>0)return;
+ const a=player.aim||0,horiz=Math.abs(Math.cos(a))>=Math.abs(Math.sin(a)),dx=horiz?Math.sign(Math.cos(a))||1:0,dy=horiz?0:Math.sign(Math.sin(a))||1;
+ const tx=Math.floor(player.x/TILE),ty=Math.floor(player.y/TILE),nx=tx+dx,ny=ty+dy;
+ const inb=(x,y)=>x>=0&&y>=0&&x<COLS&&y<ROWS;
+ if(!inb(nx,ny)||map[ny][nx]!==1||drilled.has(ny*COLS+nx)){say('Stand against a wall and face it to drill.',2);return}
+ const edge=dx>0?(tx+1)*TILE-player.x:dx<0?player.x-tx*TILE:dy>0?(ty+1)*TILE-player.y:player.y-ty*TILE;
+ if(edge>34){say('Move closer. The drill bit has to touch the rock.',2);return}
+ const tiles=[];let x=nx,y=ny,ok=false;
+ for(let k=0;k<6;k++){
+  if(!inb(x,y)){break}
+  if(map[y][x]===0||drilled.has(y*COLS+x)){ok=tiles.length>0;break}
+  if(x<=0||y<=0||x>=COLS-1||y>=ROWS-1){say('That is bedrock at the edge of the mine. The drill will not bite.',2.4);return}
+  tiles.push(y*COLS+x);x+=dx;y+=dy;
+ }
+ if(!ok){say('This rock is too thick to drill through.',2.2);return}
+ const fx=dx?(dx>0?(tx+1)*TILE:tx*TILE):player.x,fy=dy?(dy>0?(ty+1)*TILE:ty*TILE):player.y;
+ drill={t:0,dur:drillSeconds(),tiles,dx,dy,fx,fy,ping:0,snd:0,spark:0};
+ flashlightOn=flashlightOn;showAlert('DRILLING');say(`DRILL · ${drill.dur} seconds. It is deafening and the creature knows where you are. Press ${ownedAbilities().findIndex(q=>q.id==='drill')+1} to stop.`,3.2);
+}
+function cancelDrill(){if(!drill)return;drill=null;abilityCooldowns.drill=6;say('Drill stopped.',1.6);renderAbilityHud()}
+function paintDrillTiles(tiles,horiz){
+ if(!drillC){drillC=document.createElement('canvas');drillC.width=MW;drillC.height=MH}
+ const g=drillC.getContext('2d');
+ for(const idx of tiles){
+  const tx=idx%COLS,ty=(idx/COLS)|0,x=tx*TILE,y=ty*TILE;
+  g.fillStyle='#0d110f';g.fillRect(x,y,TILE,TILE);
+  for(let i=0;i<22;i++){const s=.8+Math.random()*2.2;g.fillStyle=Math.random()<.5?'rgba(120,115,95,.28)':'rgba(0,0,0,.4)';g.beginPath();g.ellipse(x+Math.random()*TILE,y+Math.random()*TILE,s,s*.7,Math.random()*3,0,TAU);g.fill()}
+  for(const [ddx,ddy] of D4){
+   const nx=tx+ddx,ny=ty+ddy;if(nx<0||ny<0||nx>=COLS||ny>=ROWS)continue;
+   if(map[ny][nx]!==1||drilled.has(ny*COLS+nx))continue;
+   const ex=ddx>0?x+TILE:x,ey=ddy>0?y+TILE:y,gr=ddx?g.createLinearGradient(ex,0,ex-ddx*20,0):g.createLinearGradient(0,ey,0,ey-ddy*20);
+   gr.addColorStop(0,'rgba(0,0,0,.95)');gr.addColorStop(1,'rgba(0,0,0,0)');g.fillStyle=gr;
+   if(ddx)g.fillRect(ddx>0?x+TILE-20:x,y,20,TILE);else g.fillRect(x,ddy>0?y+TILE-20:y,TILE,20);
+   g.strokeStyle='rgba(95,100,88,.55)';g.lineWidth=1.5;g.beginPath();
+   for(let k=0;k<=6;k++){const t=k/6,jx=(Math.random()-.5)*3;if(ddx){const px=ex+jx;k?g.lineTo(px,y+t*TILE):g.moveTo(px,y)}else{const py=ey+jx;k?g.lineTo(x+t*TILE,py):g.moveTo(x,py)}}g.stroke();
+  }
+  for(let i=0;i<5;i++){g.fillStyle=i%2?'#3a3d35':'#4d5147';g.beginPath();g.ellipse(x+6+Math.random()*(TILE-12),y+6+Math.random()*(TILE-12),2+Math.random()*3,1.5+Math.random()*2,Math.random()*3,0,TAU);g.fill()}
+ }
+}
+function finishDrill(){
+ const d=drill;drill=null;if(!d)return;
+ for(const i of d.tiles)drilled.add(i);
+ paintDrillTiles(d.tiles,!!d.dx);polyCache.clear();
+ {const oc=overC.getContext('2d');for(const i of d.tiles){const x=(i%COLS)*TILE,y=((i/COLS)|0)*TILE;oc.clearRect(x-10,y-10,TILE+20,TILE+20)}}
+ // the tunnel also cuts through the wall decals painted on the floor layer
+ {const dc=dctx;for(const i of d.tiles){const x=(i%COLS)*TILE,y=((i/COLS)|0)*TILE;dc.clearRect(x,y,TILE,TILE)}}
+ const sx=d.fx,sy=d.fy;for(let i=0;i<30;i++)P(sx+rnd(-16,16),sy+rnd(-16,16),rnd(-90,90),rnd(-90,90),rnd(.5,1.2),rnd(1.5,3.5),i%2?'#8a8a78':'#4d5147',{drag:.92});
+ Snd.crash(.8,0);shake=Math.max(shake,6);showAlert('TUNNEL OPEN');say('The drill breaks through. Only you can crawl through this tunnel.',3);
+ abilityCooldowns.drill=drillCooldown();renderAbilityHud();
+}
+function updateDrill(dt){
+ const d=drill;if(!d)return;
+ if(!player||phase!=='play'||paused||isMonsterController||(player.pitFallT||0)>0){drill=null;return}
+ d.t+=dt;
+ noise=Math.min(100,Math.max(noise,92));shake=Math.max(shake,1.8);
+ d.snd-=dt;if(d.snd<=0){d.snd=.28;Snd.drill()}
+ d.spark-=dt;if(d.spark<=0){d.spark=.05;const ux=d.dx,uy=d.dy,px=-uy,py=ux;P(d.fx,d.fy,-ux*rnd(20,90)+px*rnd(-70,70),-uy*rnd(20,90)+py*rnd(-70,70),rnd(.25,.6),rnd(1,2.2),Math.random()<.5?'#ffd27a':'#8a8a78',{drag:.9})}
+ // the creature knows exactly where you are while the drill runs
+ d.ping-=dt;
+ if(d.ping<=0){d.ping=.5;if((!multiplayer||isNetHost)&&monster&&!monster.dead&&!isMonsterController&&monster.state!=='possess'){monster.state='investigate';monster.lastSeen={x:player.x,y:player.y};monster.search=Math.max(monster.search||0,4);monster.path=null}}
+ if(d.t>=d.dur)finishDrill();
+}
+function drawDrillRig(){
+ const d=drill;if(!d||!player)return;
+ const k=clamp(d.t/d.dur,0,1),ux=d.dx,uy=d.dy,px=-uy,py=ux,sh=Math.sin(fxClock*90)*1.2;
+ // bore hole growing in the rock face
+ ctx.save();ctx.fillStyle='rgba(0,0,0,.85)';ctx.beginPath();ctx.ellipse(d.fx+ux*3,d.fy+uy*3,5+k*13,5+k*13,0,0,TAU);ctx.fill();ctx.restore();
+ ctx.save();ctx.translate(d.fx+px*sh,d.fy+py*sh);ctx.rotate(Math.atan2(uy,ux));
+ ctx.fillStyle='#5b5f57';ctx.fillRect(-30,-6,18,12);ctx.fillStyle='#c9a06a';ctx.fillRect(-14,-5,10,10);
+ ctx.fillStyle='#8d9187';ctx.beginPath();ctx.moveTo(-4,-5);ctx.lineTo(8,0);ctx.lineTo(-4,5);ctx.closePath();ctx.fill();
+ ctx.strokeStyle='#d9d5c9';ctx.lineWidth=1;for(let i=0;i<3;i++){const o=((fxClock*40+i*3)%9)-4;ctx.beginPath();ctx.moveTo(-3+i*3,-4.5+o*.0);ctx.lineTo(-1+i*3,4.5);ctx.stroke()}
+ ctx.restore();
+}
+function drawDrillHp(camX,camY){
+ const d=drill;if(!d)return;
+ const hp=clamp(1-d.t/d.dur,0,1),i=d.tiles[0],cx=(i%COLS+.5)*TILE-camX,cy=(((i/COLS)|0)+.5)*TILE-camY;
+ if(cx<-80||cx>W+80||cy<-80||cy>H+80)return;
+ const bw=64,bx=cx-bw/2,by=cy-(d.dy?0:34)-(d.dy?-34:0)+(d.dy>0?0:0);
+ ctx.save();ctx.textAlign='center';
+ const col=hp>.5?'#9bc28a':hp>.2?'#d6ad4a':'#d9604a';
+ ctx.fillStyle='rgba(0,0,0,.78)';ctx.fillRect(bx-2,by-2,bw+4,10);ctx.fillStyle='#2a2f2b';ctx.fillRect(bx,by,bw,6);ctx.fillStyle=col;ctx.fillRect(bx,by,bw*hp,6);
+ ctx.font='bold 10px monospace';ctx.fillStyle='#e8e2cf';ctx.shadowColor='#000';ctx.shadowBlur=4;ctx.fillText(`WALL ${Math.ceil(hp*100)}%`+(d.tiles.length>1?` · ${d.tiles.length} layers`:''),cx,by-5);ctx.restore();
+}
+function drawDrilled(){if(drillC)ctx.drawImage(drillC,0,0)}
 function updateAbilityWorld(dt){
+ updateDrill(dt);updateMinigun(dt);
  for(const id in abilityCooldowns)abilityCooldowns[id]=Math.max(0,(abilityCooldowns[id]||0)-dt);
  if(rifleAnim&&player){rifleAnim.t+=dt;if(!rifleAnim.fired&&rifleAnim.t>=RIFLE_FIRE_AT){rifleAnim.fired=true;fireRifleNow()}if(rifleAnim.t>=.9)rifleAnim=null}
  if(rifleReloadT>0){rifleReloadT=Math.max(0,rifleReloadT-dt);rifleClackT-=dt;if(rifleClackT<=0){rifleClackT=1.15;noise=Math.min(100,noise+(N('a10d')?9:16));try{Snd.rifleReload()}catch(e){}}if(rifleReloadT<=0)say('RIFLE RELOADED · Wait for the action to cool before the next shot.',2.6)}
@@ -1910,6 +2044,7 @@ const ICONS={
  compass:'<circle cx="12" cy="12" r="9"/><path d="M15.5 8.5L13 13l-4.5 2.5L11 11z"/>',
  map:'<path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2zM9 4v14M15 6v14"/>',
  charm:'<path d="M12 3l2.5 5.5 6 .8-4.4 4.1 1.1 6-5.2-3-5.2 3 1.1-6-4.4-4.1 6-.8z"/>',
+ drill:'<path d="M3 10h7v4H3z" fill="currentColor" fill-opacity=".3"/><path d="M10 8h4v8h-4zM14 9l7 3-7 3zM17 10.5v3M5 14v4h3v-4"/>',
  pickaxe:'<path d="M3.8 19.4l1.8 1.8 10.4-10.4-1.8-1.8z" fill="currentColor" fill-opacity=".35"/><path d="M5 5Q19 5 19 19Q13 11 5 5z" fill="currentColor" fill-opacity=".35"/><path d="M3.5 17.5l3 3M19 19l1.5 1.5M5 5L3.5 3.5"/>',
  rifle:'<path d="M2.5 15.5l3-1.2 11.5-5.3 4.5 1.3-.6 2-4.2.4-9.8 4.6-3.2.8z" fill="currentColor" fill-opacity=".3"/><path d="M17 9l-1-3M9 14.5l.8 3.5M21 10.3l1.2-.3"/>',
  wrench:'<path d="M14.7 6.3a4 4 0 0 0-5.2 5.2L4 17l3 3 5.5-5.5a4 4 0 0 0 5.2-5.2l-2.7 2.7-2.4-.6-.6-2.4z"/>',
@@ -2598,7 +2733,7 @@ function monsterKillContacts(m){
  const reach=34; // slightly generous so fast movement / lag still drops a body
  for(const b of bots)if(b.alive&&dist(b,m)<reach)killBot(b);
  // Local miner
- if((!multiplayer||netAlive)&&player&&phase==='play'&&!isMonsterController&&(!multiplayer||performance.now()>=netKillGraceUntil)&&dist(player,m)<reach){
+ if((!multiplayer||(netAlive&&isNetHost))&&player&&phase==='play'&&!isMonsterController&&(!multiplayer||performance.now()>=netKillGraceUntil)&&dist(player,m)<reach&&(dist(player,m)<16||lineOfSight(player.x,player.y,m.x,m.y))){
   die();
   if(multiplayer&&isNetHost){forceNetBodySync();checkMonsterWipe();}
   return;
@@ -2611,7 +2746,7 @@ function monsterKillContacts(m){
     if(!Number.isFinite(p.x)||!Number.isFinite(p.y))continue;
     const nowK=performance.now();if(nowK<netKillGraceUntil)continue;
     if(netKilledAt[p.id]&&nowK-netKilledAt[p.id]<3000)continue;
-    if(dist(p,m)<reach){netKilledAt[p.id]=nowK;netKillRemote(p.id,p.x,p.y)}
+    if(dist(p,m)<reach&&(dist(p,m)<16||lineOfSight(p.x,p.y,m.x,m.y))){netKilledAt[p.id]=nowK;netKillRemote(p.id,p.x,p.y)}
    }
    checkMonsterWipe();
   }
@@ -2975,7 +3110,7 @@ function updateGame(dt){
  // Noise is event-driven: only footfalls add movement noise. Idle noise fades fast;
  // ordinary movement has a tiny fade between footsteps so it cannot grow from time alone.
  let dx=(keys.d||keys.arrowright?1:0)-(keys.a||keys.arrowleft?1:0),dy=(keys.s||keys.arrowdown?1:0)-(keys.w||keys.arrowup?1:0);
- if(puzzle){dx=0;dy=0}
+ if(puzzle||drill){dx=0;dy=0}
  const len=Math.hypot(dx,dy),moving=len>0;if(moving){dx/=len;dy/=len}
  const crouch=!!(keys.c||keys.control);
  if(player.tired&&player.stamina>upgradeTiredExit())player.tired=false;
@@ -3300,7 +3435,7 @@ function draw(){
  blitWorld(mapC,camX,camY);
  // Flooded pockets: merged organic pools with animated surface, reflections and ripples.
  drawWater(camX,camY);
- blitWorld(decC,camX,camY);
+ blitWorld(decC,camX,camY);drawDrilled();
  // puddles with ripples
  for(const p of puddles){
   if(p.x<camX-60||p.x>camX+W+60||p.y<camY-60||p.y>camY+H+60)continue;
@@ -3340,10 +3475,10 @@ function draw(){
  if((!multiplayer||phase!=='spectate')&&!isMonsterController){
  {
   const mvv=player.mv;
-  if(player.pitFallT>0){const k=clamp(player.pitFallT/.42,0,1);ctx.save();ctx.translate(player.x,player.y);ctx.scale(.28+.72*k,.28+.72*k);ctx.globalAlpha=.35+.65*k;drawMiner(0,0,player.aim,player.foot,mvv,PAL.player);ctx.restore()}else if(!player.pitGone){if(N('a10')){const rt=rifleAnim?rifleAnim.t:9;drawRifle(player.x,player.y,player.aim,rifleAnim?riflePose(rt):0,rifleAnim?rifleRecoil(rt):0)}drawMiner(player.x,player.y,player.aim,player.foot,mvv,PAL.player,N('a10')?{noArms:true}:undefined)}
+  if(player.pitFallT>0){const k=clamp(player.pitFallT/.42,0,1);ctx.save();ctx.translate(player.x,player.y);ctx.scale(.28+.72*k,.28+.72*k);ctx.globalAlpha=.35+.65*k;drawMiner(0,0,player.aim,player.foot,mvv,PAL.player);ctx.restore()}else if(!player.pitGone){if(rifleCarried()){const rt=rifleAnim?rifleAnim.t:9;drawRifle(player.x,player.y,player.aim,rifleAnim?riflePose(rt):mgPose(),rifleAnim?rifleRecoil(rt):mgRecoil())}drawMiner(player.x,player.y,player.aim,player.foot,mvv,PAL.player,N('a10')?{noArms:true}:undefined)}
   if(multiplayer){ctx.save();ctx.font='10px Consolas,monospace';ctx.textAlign='center';ctx.textBaseline='bottom';ctx.fillStyle='rgba(0,0,0,.7)';ctx.fillRect(player.x-42,player.y-32,84,13);ctx.fillStyle='#d7d8bd';ctx.fillText(String(netName||'MINER').slice(0,18),player.x,player.y-22);ctx.restore()}
   // flashlight in the leading hand, or the rifle when you carry one
-  if(!N('a10')){
+  if(!rifleCarried()){
   ctx.save();ctx.translate(player.x+Math.cos(player.aim)*11,player.y+Math.sin(player.aim)*11);ctx.rotate(player.aim);
   ctx.fillStyle='#161a17';ctx.fillRect(-2,-2.2,9,4.4);ctx.fillStyle='#d3dfb4';ctx.fillRect(6.5,-2.4,2.2,4.8);ctx.restore();
   }
@@ -3354,8 +3489,8 @@ function draw(){
  }
  // Remote crew members are replicated from the authoritative lobby server.
  if(multiplayer){for(const rp of netPlayers){if(rp.id===netMyId||isMonsterPlayerId(rp.id)||rp.role==='monster'||rp.alive===false||!Number.isFinite(rp.x)||!Number.isFinite(rp.y))continue;
-  if(rp.rifle){const an=netShotAnim[rp.id],tt=an?(performance.now()-an)/1000:9;drawRifle(rp.x,rp.y,rp.aim||0,tt<.85?riflePose(tt):0,rifleRecoil(tt))}
-  drawMiner(rp.x,rp.y,rp.aim||0,fxClock*5,rp.moving?1:0,PAL.player,rp.rifle?{noArms:true}:undefined);
+  if(rp.rifle||forestMode()){const an=netShotAnim[rp.id],tt=an?(performance.now()-an)/1000:9;drawRifle(rp.x,rp.y,rp.aim||0,tt<.85?riflePose(tt):0,rifleRecoil(tt))}
+  drawMiner(rp.x,rp.y,rp.aim||0,fxClock*5,rp.moving?1:0,PAL.player,(rp.rifle||forestMode())?{noArms:true}:undefined);
   ctx.save();ctx.font='10px Consolas,monospace';ctx.textAlign='center';ctx.textBaseline='bottom';ctx.fillStyle='rgba(0,0,0,.7)';ctx.fillRect(rp.x-42,rp.y-32,84,13);ctx.fillStyle='#d7d8bd';ctx.fillText(String(rp.name||'MINER').slice(0,18),rp.x,rp.y-22);ctx.restore();
  }}
  for(const l of lanterns){
@@ -3364,7 +3499,7 @@ function draw(){
  }
  drawParticles();
  drawAbilityObjects();
- drawSpores(camX,camY);drawVents(camX,camY);
+ drawSpores(camX,camY);drawVents(camX,camY);drawDrillRig();
  for(const o of ores){if(o.x<camX-20||o.x>camX+W+20||o.y<camY-20||o.y>camY+H+20)continue;const s=Math.sin(fxClock*2.4+o.ph);if(s>.82){ctx.fillStyle=o.c?`rgba(150,240,240,${(s-.82)*5})`:`rgba(255,235,150,${(s-.82)*5})`;ctx.fillRect(o.x-1,o.y-1,2,2)}}
  blitWorld(overC,camX,camY);
  ctx.restore();
@@ -3453,6 +3588,7 @@ function draw(){
  drawUpgradeOverlays(camX,camY);
  drawSpectateMarkers(camX,camY,cameraFocus);
  // gimmick overlays are drawn in screen space so warnings stay readable in the dark
+ drawDrillHp(camX,camY);
  for(const h of rocks){const sx=h.x-camX,sy=h.y-camY;if(sx<-90||sx>W+90||sy<-90||sy>H+90)continue;
   if(!h.hit){const k=clamp(h.t/h.warn,0,1);ctx.save();ctx.lineWidth=2;ctx.strokeStyle=`rgba(235,95,65,${.5+.3*Math.sin(fxClock*18)})`;ctx.setLineDash([6,5]);ctx.lineDashOffset=-fxClock*24;ctx.beginPath();ctx.arc(sx,sy,h.r,0,TAU);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle=`rgba(200,60,40,${.05+k*.2})`;ctx.fill();ctx.strokeStyle='rgba(255,190,160,.65)';ctx.beginPath();ctx.arc(sx,sy,h.r*k,0,TAU);ctx.stroke();ctx.fillStyle='rgba(235,210,190,.5)';for(let i=0;i<4;i++){const px=sx+Math.sin(i*2.3+fxClock*3)*h.r*.6,py=sy-((fxClock*70+i*23)%50)+10;ctx.fillRect(px,py,1.6,3)}ctx.restore()}
   else{ctx.fillStyle=`rgba(190,180,160,${clamp(h.fl,0,1)*.7})`;ctx.beginPath();ctx.arc(sx,sy,h.r*(1+(.35-h.fl)),0,TAU);ctx.fill()}}
@@ -3501,7 +3637,7 @@ function draw(){
 }
 function drawMini(){
  mctx.clearRect(0,0,mini.width,mini.height);
- for(let y=0;y<ROWS;y++)for(let x=0;x<COLS;x++){if(!explored[y*COLS+x])continue;mctx.fillStyle=map[y][x]?'#2b332f':'#5d6b60';mctx.fillRect(x*4,y*4,4,4)}
+ for(let y=0;y<ROWS;y++)for(let x=0;x<COLS;x++){if(!explored[y*COLS+x])continue;mctx.fillStyle=map[y][x]&&!drilled.has(y*COLS+x)?'#2b332f':'#5d6b60';mctx.fillRect(x*4,y*4,4,4)}
  for(const p of pitTiles)if(explored[p.y*COLS+p.x]){mctx.fillStyle='#080b0a';mctx.fillRect(p.x*4+1,p.y*4+1,2,2);mctx.fillStyle='#8b7961';mctx.fillRect(p.x*4+1,p.y*4,2,1)}
  if(N('m9')||explored[24*COLS+32]){mctx.fillStyle='#d7b66d';mctx.fillRect(32*4,24*4,4,4)}
  for(const b of bots)if(b.alive&&(N('m6')||dist(b,player)<260)){mctx.fillStyle='#8fb39a';mctx.fillRect(b.x/TILE*4-1.5,b.y/TILE*4-1.5,3,3)}
@@ -3964,6 +4100,9 @@ function start(){
 }
 function setPaused(p){if(descentActive||phase!=='play'||(multiplayer&&p))return;paused=p;$('pause').style.display=p?'flex':'none';if(p){Snd.spray(false);prevPainting=false}else last=performance.now()}
 $('start').onclick=start;$('again').onclick=start;$('resume').onclick=()=>setPaused(false);
+addEventListener('mousedown',e=>{if(e.button===0&&e.target&&e.target.tagName==='CANVAS')keys.mouse0=true});
+addEventListener('mouseup',e=>{if(e.button===0)keys.mouse0=false});
+addEventListener('blur',()=>{keys.mouse0=false;keys.g=false});
 addEventListener('keydown',e=>{
  if(e.target&&(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA'))return;
  if(descentActive){if(!e.repeat)descentSkip();e.preventDefault();return}
@@ -4125,7 +4264,7 @@ function netStartGame(d){
    netMonsterControllerId=pick.id;netMonsterControllerName=pick.name||'MINER';
   }
  }
- netFlash=null;netFlashSeq=0;netFlashSeen={};netShot=null;netShotSeq=0;netShotSeen={};netStun=null;netStunSeq=0;netStunSeen={};netIgnoreDeathUntil=performance.now()+3000;netKillGraceUntil=performance.now()+3000;netDeadSince=0;netKilledAt={};netLocalWorld=false;netMyActs=[];netDescendPending=null;netLiftUse=null;netRoundId=0;netMonsterWinPending=false;depth=1;MM=freshMM();silver=0;runUpgrades={};shopOpen=false;netUps={};netSeededSetup(netSeed);
+ netFlash=null;netFlashSeq=0;netFlashSeen={};netShot=null;netShotSeq=0;netShotSeen={};netMgSeen={};netMgBuf=[];netMgSeq=0;netStun=null;netStunSeq=0;netStunSeen={};netIgnoreDeathUntil=performance.now()+3000;netKillGraceUntil=performance.now()+3000;netDeadSince=0;netKilledAt={};netLocalWorld=false;netMyActs=[];netDescendPending=null;netLiftUse=null;netRoundId=0;netMonsterWinPending=false;depth=1;MM=freshMM();silver=0;runUpgrades={};shopOpen=false;netUps={};netSeededSetup(netSeed);
  // Reuse the game's existing crew AI as the bot-filled player slots. Add/remove bots deterministically to exactly match the lobby.
  bots=bots.slice(0,netBotSlots);
  while(bots.length<netBotSlots){const slot=bots.length,c=floorList[(47+slot*71)%floorList.length],p={x:(c.x+.5)*TILE,y:(c.y+.5)*TILE};const names=['BOT-01','BOT-02','BOT-03','BOT-04'];bots.push({...p,r:9,alive:true,name:names[slot]||'BOT',pal:PAL.MINER,path:null,pi:0,think:0,ph:slot, gold:0,tags:0,panic:0,goal:null,paint:0,work:0,fx:0,fy:1,ang:Math.PI/2,moving:false,repath:0})}
@@ -4376,7 +4515,7 @@ function netTick(){
    monsterPossessQueued=false;monsterRevealQueued=false;
    netSocket.emit('player-state',payload);
   }else{
-   netSocket.emit('player-state',{x:player.x,y:player.y,aim:player.aim,mv:player.mv,foot:player.foot,alive:true,flashlightOn,noise, moving:!!(keys.w||keys.a||keys.s||keys.d||keys.arrowup||keys.arrowdown||keys.arrowleft||keys.arrowright),name:netName,liftUse:netLiftUse,flash:netFlash,stun:netStun,rifle:N('a10')>0,shot:netShot,worldActs:netLocalWorld?netMyActs:undefined});
+   netSocket.emit('player-state',{x:player.x,y:player.y,aim:player.aim,mv:player.mv,foot:player.foot,alive:true,flashlightOn,noise, moving:!!(keys.w||keys.a||keys.s||keys.d||keys.arrowup||keys.arrowdown||keys.arrowleft||keys.arrowright),name:netName,liftUse:netLiftUse,flash:netFlash,stun:netStun,rifle:rifleCarried(),shot:netShot,drill:!!drill,mg:netMgBuf.length?netMgBuf:undefined,worldActs:netLocalWorld?netMyActs:undefined});
   }
  }
  if(isNetHost&&now-netLastMonsterSend>75&&(phase==='play'||phase==='spectate')){netLastMonsterSend=now;syncNetworkBodies();netSocket.emit('monster-state',netPackMonster())}
