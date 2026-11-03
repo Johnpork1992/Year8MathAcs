@@ -454,7 +454,7 @@ const PAL={
  MINER:{suit:'#4a4d3f',vest:'#7d7a52',helmet:'#aaa07a',boots:'#1d1e19',skin:'#8f8670'}
 };
 let map,reach,floorList,wallFaces,mapC,overC,decC,dctx;
-let drilled=new Set(),drillC=null,drill=null;
+let drilled=new Set(),drillPassages=new Map(),drillC=null,drill=null;
 let player,monster,bodies,gold,tags,exit,bots,lanterns,rats,puddles,ores,particles,explored,floodedTiles=[];
 let pitTiles=[],pitSet=new Set(),mineVeins=[];
 
@@ -575,7 +575,7 @@ function say(t,d){hintT=d||2;setText('hint',t)}
 function showAlert(t){$('alert').textContent=t;alertT=1.5}
 
 /* ---------- map ---------- */
-const walk=(x,y,allowPits=false)=>{const tx=Math.floor(x/TILE),ty=Math.floor(y/TILE);return tx>=0&&ty>=0&&tx<COLS&&ty<ROWS&&(map[ty][tx]===0||(allowPits&&drilled.has(ty*COLS+tx)))&&(allowPits||!pitSet.has(ty*COLS+tx))};
+const walk=(x,y,allowPits=false)=>{const tx=Math.floor(x/TILE),ty=Math.floor(y/TILE);if(tx<0||ty<0||tx>=COLS||ty>=ROWS)return false;const idx=ty*COLS+tx;let open=map[ty][tx]===0;if(allowPits&&drillPassages.has(idx)){const p=drillPassages.get(idx),lx=x-tx*TILE,ly=y-ty*TILE;open=p.dx?Math.abs(ly-TILE/2)<=18:Math.abs(lx-TILE/2)<=18}return open&&(allowPits||!pitSet.has(idx))};
 const blocked=(x,y,r,allowPits=false)=>!walk(x-r,y-r,allowPits)||!walk(x+r,y-r,allowPits)||!walk(x-r,y+r,allowPits)||!walk(x+r,y+r,allowPits);
 function inFlood(x,y){return !!floodedTiles&&floodedTiles.some(c=>c.x===Math.floor(x/TILE)&&c.y===Math.floor(y/TILE))}
 function moveEntity(e,dx,dy,r){const allowPits=e===player;if(!blocked(e.x+dx,e.y,r,allowPits))e.x+=dx;if(!blocked(e.x,e.y+dy,r,allowPits))e.y+=dy}
@@ -907,7 +907,7 @@ function setup(){
  monster={x:(sp.x+.5)*TILE,y:(sp.y+.5)*TILE,r:14,state:'stalk',path:null,pi:0,repath:0,fx:0,fy:1,ang:Math.PI/2,t:0,lastSeen:null,search:0,huntT:'player',host:null,disguise:null,dT:0,stuck:0,gait:0,mv:0,revealed:false,pause:0,wCool:0};
  noise=0;elapsed=0;shake=0;hintT=0;alertT=0;hbT=1;heartPulse=0;liftOpen=0;endT=0;painting=null;prevPainting=false;puzzle=null;lastQuota=false;whT=8;breathT=0;
  rumbleT=rnd(30,50);knockT=rnd(18,32);growlT=rnd(10,18);
- flashlightOn=true;mmNewLevel();rocks=[];spores=[];battery=100;sporeAmt=0;coughT=1;rockT=3.5;bellN=0;bellFlash=0;bellPing=0;drilled=new Set();drillC=null;drill=null;blackOn=0;blackWarn=false;vents=[];quakeAmt=0;quakeWarned=false;quakePulse=0;coldShiver=0;idleT=0;
+ flashlightOn=true;mmNewLevel();rocks=[];spores=[];battery=100;sporeAmt=0;coughT=1;rockT=3.5;bellN=0;bellFlash=0;bellPing=0;drilled=new Set();drillPassages=new Map();drillC=null;drill=null;blackOn=0;blackWarn=false;vents=[];quakeAmt=0;quakeWarned=false;quakePulse=0;coldShiver=0;idleT=0;
  if(gim('gas')){const n=Math.min(9,4+Math.floor(depth/2));for(let i=0;i<n;i++){let p=null;for(let t=0;t<12;t++){const c=randomFloor(200,player.x,player.y);if(Math.hypot(c.x-exit.x,c.y-exit.y)<170)continue;p=c;break}if(!p)p=randomFloor(200,player.x,player.y);vents.push({x:p.x,y:p.y,off:rnd(0,10),k:0,warn:false,hissed:false})}}
  if(gim('spores')){const n=6+Math.min(6,depth);for(let i=0;i<n;i++){let p=null;for(let t=0;t<12;t++){const c=randomFloor(230,player.x,player.y);if(Math.hypot(c.x-exit.x,c.y-exit.y)<150)continue;p=c;break}if(!p)p=randomFloor(230,player.x,player.y);spores.push({bx:p.x,by:p.y,a:rnd(18,46),s:rnd(.22,.5),ph:rnd(0,TAU),r:rnd(62,92),p:{x:p.x,y:p.y}})}}
  applyRunUpgradeEffects();
@@ -1682,13 +1682,13 @@ function startDrill(){
  const a=player.aim||0,horiz=Math.abs(Math.cos(a))>=Math.abs(Math.sin(a)),dx=horiz?Math.sign(Math.cos(a))||1:0,dy=horiz?0:Math.sign(Math.sin(a))||1;
  const tx=Math.floor(player.x/TILE),ty=Math.floor(player.y/TILE),nx=tx+dx,ny=ty+dy;
  const inb=(x,y)=>x>=0&&y>=0&&x<COLS&&y<ROWS;
- if(!inb(nx,ny)||map[ny][nx]!==1||drilled.has(ny*COLS+nx)){say('Stand against a wall and face it to drill.',2);return}
+ if(!inb(nx,ny)||map[ny][nx]!==1||drillPassages.has(ny*COLS+nx)){say('Stand against a wall and face it to drill.',2);return}
  const edge=dx>0?(tx+1)*TILE-player.x:dx<0?player.x-tx*TILE:dy>0?(ty+1)*TILE-player.y:player.y-ty*TILE;
  if(edge>34){say('Move closer. The drill bit has to touch the rock.',2);return}
  const tiles=[];let x=nx,y=ny,ok=false;
  for(let k=0;k<6;k++){
   if(!inb(x,y)){break}
-  if(map[y][x]===0||drilled.has(y*COLS+x)){ok=tiles.length>0;break}
+  if(map[y][x]===0||drillPassages.has(y*COLS+x)){ok=tiles.length>0;break}
   if(x<=0||y<=0||x>=COLS-1||y>=ROWS-1){say('That is bedrock at the edge of the mine. The drill will not bite.',2.4);return}
   tiles.push(y*COLS+x);x+=dx;y+=dy;
  }
@@ -1701,29 +1701,16 @@ function cancelDrill(){if(!drill)return;drill=null;abilityCooldowns.drill=6;say(
 function paintDrillTiles(tiles,horiz){
  if(!drillC){drillC=document.createElement('canvas');drillC.width=MW;drillC.height=MH}
  const g=drillC.getContext('2d');
- for(const idx of tiles){
-  const tx=idx%COLS,ty=(idx/COLS)|0,x=tx*TILE,y=ty*TILE;
-  g.fillStyle='#0d110f';g.fillRect(x,y,TILE,TILE);
-  for(let i=0;i<22;i++){const s=.8+Math.random()*2.2;g.fillStyle=Math.random()<.5?'rgba(120,115,95,.28)':'rgba(0,0,0,.4)';g.beginPath();g.ellipse(x+Math.random()*TILE,y+Math.random()*TILE,s,s*.7,Math.random()*3,0,TAU);g.fill()}
-  for(const [ddx,ddy] of D4){
-   const nx=tx+ddx,ny=ty+ddy;if(nx<0||ny<0||nx>=COLS||ny>=ROWS)continue;
-   if(map[ny][nx]!==1||drilled.has(ny*COLS+nx))continue;
-   const ex=ddx>0?x+TILE:x,ey=ddy>0?y+TILE:y,gr=ddx?g.createLinearGradient(ex,0,ex-ddx*20,0):g.createLinearGradient(0,ey,0,ey-ddy*20);
-   gr.addColorStop(0,'rgba(0,0,0,.95)');gr.addColorStop(1,'rgba(0,0,0,0)');g.fillStyle=gr;
-   if(ddx)g.fillRect(ddx>0?x+TILE-20:x,y,20,TILE);else g.fillRect(x,ddy>0?y+TILE-20:y,TILE,20);
-   g.strokeStyle='rgba(95,100,88,.55)';g.lineWidth=1.5;g.beginPath();
-   for(let k=0;k<=6;k++){const t=k/6,jx=(Math.random()-.5)*3;if(ddx){const px=ex+jx;k?g.lineTo(px,y+t*TILE):g.moveTo(px,y)}else{const py=ey+jx;k?g.lineTo(x+t*TILE,py):g.moveTo(x,py)}}g.stroke();
-  }
-  for(let i=0;i<5;i++){g.fillStyle=i%2?'#3a3d35':'#4d5147';g.beginPath();g.ellipse(x+6+Math.random()*(TILE-12),y+6+Math.random()*(TILE-12),2+Math.random()*3,1.5+Math.random()*2,Math.random()*3,0,TAU);g.fill()}
+ for(const idx of tiles){const tx=idx%COLS,ty=(idx/COLS)|0,x=tx*TILE,y=ty*TILE,c=TILE/2;g.save();
+  if(horiz){g.fillStyle='rgba(0,0,0,.96)';g.fillRect(x,y+c-17,TILE,34);g.fillStyle='rgba(3,6,5,.98)';g.fillRect(x,y+c-12,TILE,24);g.strokeStyle='#777665';g.lineWidth=3;g.beginPath();g.moveTo(x,y+c-17);g.lineTo(x+TILE,y+c-17);g.moveTo(x,y+c+17);g.lineTo(x+TILE,y+c+17);g.stroke()}
+  else{g.fillStyle='rgba(0,0,0,.96)';g.fillRect(x+c-17,y,34,TILE);g.fillStyle='rgba(3,6,5,.98)';g.fillRect(x+c-12,y,24,TILE);g.strokeStyle='#777665';g.lineWidth=3;g.beginPath();g.moveTo(x+c-17,y);g.lineTo(x+c-17,y+TILE);g.moveTo(x+c+17,y);g.lineTo(x+c+17,y+TILE);g.stroke()}
+  for(let n=0;n<12;n++){const along=Math.random()*TILE,off=15+Math.random()*5;g.fillStyle=n%2?'#4d5147':'#777363';g.beginPath();if(horiz)g.ellipse(x+along,y+c+(Math.random()<.5?-off:off),2+Math.random()*2,1.5,Math.random(),0,TAU);else g.ellipse(x+c+(Math.random()<.5?-off:off),y+along,2+Math.random()*2,1.5,Math.random(),0,TAU);g.fill()}g.restore();
  }
 }
 function finishDrill(){
  const d=drill;drill=null;if(!d)return;
- for(const i of d.tiles)drilled.add(i);
+ for(const i of d.tiles)drillPassages.set(i,{dx:!!d.dx,dy:!!d.dy});
  paintDrillTiles(d.tiles,!!d.dx);polyCache.clear();
- {const oc=overC.getContext('2d');for(const i of d.tiles){const x=(i%COLS)*TILE,y=((i/COLS)|0)*TILE;oc.clearRect(x-10,y-10,TILE+20,TILE+20)}}
- // the tunnel also cuts through the wall decals painted on the floor layer
- {const dc=dctx;for(const i of d.tiles){const x=(i%COLS)*TILE,y=((i/COLS)|0)*TILE;dc.clearRect(x,y,TILE,TILE)}}
  const sx=d.fx,sy=d.fy;for(let i=0;i<30;i++)P(sx+rnd(-16,16),sy+rnd(-16,16),rnd(-90,90),rnd(-90,90),rnd(.5,1.2),rnd(1.5,3.5),i%2?'#8a8a78':'#4d5147',{drag:.92});
  Snd.crash(.8,0);shake=Math.max(shake,6);showAlert('TUNNEL OPEN');say('The drill breaks through. Only you can crawl through this tunnel.',3);
  abilityCooldowns.drill=drillCooldown();renderAbilityHud();
@@ -1731,6 +1718,7 @@ function finishDrill(){
 function updateDrill(dt){
  const d=drill;if(!d)return;
  if(!player||phase!=='play'||paused||isMonsterController||(player.pitFallT||0)>0){drill=null;return}
+ if(keys.w||keys.a||keys.s||keys.d||keys.arrowup||keys.arrowdown||keys.arrowleft||keys.arrowright){cancelDrill();return}
  d.t+=dt;
  noise=Math.min(100,Math.max(noise,92));shake=Math.max(shake,1.8);
  d.snd-=dt;if(d.snd<=0){d.snd=.28;Snd.drill()}
@@ -3111,8 +3099,8 @@ function updateGame(dt){
  // Noise is event-driven: only footfalls add movement noise. Idle noise fades fast;
  // ordinary movement has a tiny fade between footsteps so it cannot grow from time alone.
  let dx=(keys.d||keys.arrowright?1:0)-(keys.a||keys.arrowleft?1:0),dy=(keys.s||keys.arrowdown?1:0)-(keys.w||keys.arrowup?1:0);
- if(puzzle||drill){dx=0;dy=0}
- const len=Math.hypot(dx,dy),moving=len>0;if(moving){dx/=len;dy/=len}
+ if(puzzle){dx=0;dy=0}
+ const len=Math.hypot(dx,dy),moving=len>0;if(drill&&moving)cancelDrill();if(moving){dx/=len;dy/=len}
  const crouch=!!(keys.c||keys.control);
  if(player.tired&&player.stamina>upgradeTiredExit())player.tired=false;
  const sprint=keys.shift&&moving&&!crouch&&!player.tired&&player.stamina>0;
@@ -3638,7 +3626,7 @@ function draw(){
 }
 function drawMini(){
  mctx.clearRect(0,0,mini.width,mini.height);
- for(let y=0;y<ROWS;y++)for(let x=0;x<COLS;x++){if(!explored[y*COLS+x])continue;mctx.fillStyle=map[y][x]&&!drilled.has(y*COLS+x)?'#2b332f':'#5d6b60';mctx.fillRect(x*4,y*4,4,4)}
+ for(let y=0;y<ROWS;y++)for(let x=0;x<COLS;x++){if(!explored[y*COLS+x])continue;const idx=y*COLS+x;mctx.fillStyle=map[y][x]?'#2b332f':'#5d6b60';mctx.fillRect(x*4,y*4,4,4);if(drillPassages.has(idx)){const q=drillPassages.get(idx);mctx.strokeStyle='#d7b66d';mctx.lineWidth=1.5;mctx.beginPath();if(q.dx){mctx.moveTo(x*4,y*4+2);mctx.lineTo(x*4+4,y*4+2)}else{mctx.moveTo(x*4+2,y*4);mctx.lineTo(x*4+2,y*4+4)}mctx.stroke()}}
  for(const p of pitTiles)if(explored[p.y*COLS+p.x]){mctx.fillStyle='#080b0a';mctx.fillRect(p.x*4+1,p.y*4+1,2,2);mctx.fillStyle='#8b7961';mctx.fillRect(p.x*4+1,p.y*4,2,1)}
  if(N('m9')||explored[24*COLS+32]){mctx.fillStyle='#d7b66d';mctx.fillRect(32*4,24*4,4,4)}
  for(const b of bots)if(b.alive&&(N('m6')||dist(b,player)<260)){mctx.fillStyle='#8fb39a';mctx.fillRect(b.x/TILE*4-1.5,b.y/TILE*4-1.5,3,3)}
