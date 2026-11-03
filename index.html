@@ -1588,7 +1588,8 @@ function killMonster(){
 function rifleHit(p,shooterId){
  const m=monster;
  if(m.state==='disguise'){try{reveal(netMonsterTarget(m))}catch(e){}}
- m.stunT=Math.max(m.stunT||0,p.stun);m.pause=Math.max(m.pause||0,p.stun);m.path=null;m.pinT=0;m.hits=(m.hits||0)+1;
+ if(p.mg){m.mgT=.4}else{m.stunT=Math.max(m.stunT||0,p.stun);m.pause=Math.max(m.pause||0,p.stun);m.path=null;m.pinT=0}
+ m.hits=(m.hits||0)+1;
  for(let i=0;i<14;i++)P(m.x,m.y-4,rnd(-130,130),rnd(-130,130),rnd(.25,.6),rnd(1.3,2.4),i%3?'#7a1a14':'#d9d1b4',{drag:.9});
  {const nh=performance.now();if(!p.mg||nh-mgHitSnd>85){try{Snd.rifleHit()}catch(e){}}}
  if(m.hits>=p.need){killMonster();return}
@@ -2552,7 +2553,7 @@ function mmEscaped(){MM.hide=clamp(MM.hide+.1,0,1);mmNotice()}
 
 function updateMonster(dt){
  const m=monster;m.t+=dt;m.blindT=Math.max(0,(m.blindT||0)-dt);const blind=m.blindT>0;
- m.stunT=Math.max(0,(m.stunT||0)-dt);
+ m.stunT=Math.max(0,(m.stunT||0)-dt);m.mgT=Math.max(0,(m.mgT||0)-dt);
  if(m.dead){m.mv=0;return}
  if(m.pinT>0){m.pinT-=dt;const PT=pinTarget(m);if(PT){m.pinX=PT.x;m.pinY=PT.y}else m.pinT=0}
  m.chkT=(m.chkT||0)-dt;
@@ -2707,7 +2708,7 @@ function updateMonster(dt){
   const base={stalk:64,investigate:98,search:84,hunt:m.revealed?158:138}[m.state]||64;
   // The creature is slowed by deep water too, but its longer stride lets it push through faster than the player.
   const darkEscapeSlowdown=(!targetLamp&&m.state==='hunt'&&m.huntT==='player')?lerp(.84,1,MM.dark):1;
-  const spd=(base+(m.state==='hunt'&&targetNoise>50?22:0))*depthScale()*(inFlood(m.x,m.y)?.78:1)*darkEscapeSlowdown*(blackOn>0?1.1:1)*(blind?.6:1);
+  const spd=(base+(m.state==='hunt'&&targetNoise>50?22:0))*depthScale()*(inFlood(m.x,m.y)?.78:1)*darkEscapeSlowdown*(blackOn>0?1.1:1)*(blind?.6:1)*(m.mgT>0?.5:1);
   let moved=false;
   if(m.state==='hunt'||m.state==='investigate'||(m.state==='search'&&m.lastSeen)){
    const goal=mmGoal(m,targetPlayer);m.repath-=dt;
@@ -3475,7 +3476,7 @@ function draw(){
  if((!multiplayer||phase!=='spectate')&&!isMonsterController){
  {
   const mvv=player.mv;
-  if(player.pitFallT>0){const k=clamp(player.pitFallT/.42,0,1);ctx.save();ctx.translate(player.x,player.y);ctx.scale(.28+.72*k,.28+.72*k);ctx.globalAlpha=.35+.65*k;drawMiner(0,0,player.aim,player.foot,mvv,PAL.player);ctx.restore()}else if(!player.pitGone){if(rifleCarried()){const rt=rifleAnim?rifleAnim.t:9;drawRifle(player.x,player.y,player.aim,rifleAnim?riflePose(rt):mgPose(),rifleAnim?rifleRecoil(rt):mgRecoil())}drawMiner(player.x,player.y,player.aim,player.foot,mvv,PAL.player,N('a10')?{noArms:true}:undefined)}
+  if(player.pitFallT>0){const k=clamp(player.pitFallT/.42,0,1);ctx.save();ctx.translate(player.x,player.y);ctx.scale(.28+.72*k,.28+.72*k);ctx.globalAlpha=.35+.65*k;drawMiner(0,0,player.aim,player.foot,mvv,PAL.player);ctx.restore()}else if(!player.pitGone){if(rifleCarried()){const rt=rifleAnim?rifleAnim.t:9;drawRifle(player.x,player.y,player.aim,rifleAnim?riflePose(rt):mgPose(),rifleAnim?rifleRecoil(rt):mgRecoil())}drawMiner(player.x,player.y,player.aim,player.foot,mvv,PAL.player,rifleCarried()?{noArms:true}:undefined)}
   if(multiplayer){ctx.save();ctx.font='10px Consolas,monospace';ctx.textAlign='center';ctx.textBaseline='bottom';ctx.fillStyle='rgba(0,0,0,.7)';ctx.fillRect(player.x-42,player.y-32,84,13);ctx.fillStyle='#d7d8bd';ctx.fillText(String(netName||'MINER').slice(0,18),player.x,player.y-22);ctx.restore()}
   // flashlight in the leading hand, or the rifle when you carry one
   if(!rifleCarried()){
