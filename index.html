@@ -10,8 +10,19 @@
 html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#050707;color:var(--pale);font-family:Consolas,Monaco,monospace;user-select:none;-webkit-user-select:none}
 canvas#game{display:block;width:100vw;height:100vh}
 #hud{position:fixed;inset:0;pointer-events:none;text-shadow:0 2px 4px #000}
+#chatLog{position:absolute;left:14px;bottom:92px;width:min(400px,46vw);max-height:36vh;overflow:hidden;justify-content:flex-end;display:flex;flex-direction:column;gap:3px;font:12px/1.4 monospace;pointer-events:none}
+#chatLog .cm{white-space:pre-wrap;padding:3px 8px;background:#050807b8;border-left:2px solid #6e8a5a;color:#dfe6dc;word-break:break-word;transition:opacity .6s}
+#chatLog .cm b{color:#d7b66d}#chatLog .cm.me b{color:#8fd0b0}#chatLog .cm.sys{border-left-color:#7f8f94;color:#aeb8ad;background:#050807d0}#chatLog .cm.act{border-left-color:#b79cff;color:#d9ccff;font-style:italic}#chatLog .cm.wh{border-left-color:#ff8ad8;color:#ffd0f1}@keyframes disco{to{filter:hue-rotate(360deg) saturate(1.8)}}
+#chatLog .cm.old{opacity:0}
+#chatLog.open .cm.old{opacity:1}
+#chatBox{position:absolute;left:14px;bottom:62px;width:min(400px,46vw);display:none;pointer-events:auto}
+#chatBox input{width:100%;box-sizing:border-box;padding:7px 9px;background:#050807ee;border:1px solid #6e8a5a;color:#f0f3ea;font:13px monospace;outline:none}
 .panel{position:absolute;background:linear-gradient(135deg,#11191be8,#080b0ce8);border:1px solid #65706a66;padding:9px 12px;box-shadow:0 0 22px #0008}
 #stats{left:14px;top:14px;min-width:182px;font-size:12px;line-height:1.55}
+#objective.objHide{display:none}
+#objToggle{position:absolute;right:20px;top:17px;z-index:3;pointer-events:auto;cursor:pointer;min-width:22px;height:22px;padding:0 6px;font:700 12px/20px monospace;color:#d7b66d;background:#0b100ef0;border:1px solid #6e766b;text-shadow:none}
+#objToggle:hover{border-color:#d7b66d;color:#fff0b8}
+#objToggle.collapsed{top:14px;right:14px;height:26px;padding:0 10px;letter-spacing:.1em;font-size:11px;line-height:24px}
 #objective{right:14px;top:14px;width:min(255px,31vw);font-size:11px;line-height:1.45;max-height:calc(100vh - 28px);overflow:hidden}
 .bar{height:4px;margin:2px 0 5px;background:#1c2420;border:1px solid #3b453f}
 .bar i{display:block;height:100%;width:0;background:#7f9a83;transition:width .1s}
@@ -282,13 +293,15 @@ kbd{border:1px solid #59635a;padding:0 5px;color:#d7b66d}
 <canvas id="game"></canvas>
 <div id="hud">
  <div id="stats" class="panel">DEPTH <b id="depth">01</b> · <span id="layerName">UPPER SEAMS</span><br>SHIFT <b id="shift">01</b> · <span id="clock">00:00</span><br>GOLD <b id="gold">0 / 6</b><br>GRAFFITI <b id="tags">0 / 3</b><br>CREW <b id="crew">2 ALIVE</b><br>NOISE <b id="noise">LOW</b><div class="bar"><i id="noiseBar"></i></div>STAMINA<div class="bar"><i id="stamBar"></i></div><span id="batRow" style="display:none">LAMP<div class="bar"><i id="batBar"></i></div></span><div id="gimLine" style="color:#d7b66d;font-size:10px;line-height:1.4;margin-top:3px"></div><div id="memLine" style="color:#b9857b;font-size:10px;line-height:1.4;margin-top:2px"></div><div id="silverLine" style="color:#c9ced1;font-size:10px;line-height:1.4;margin-top:2px"></div></div>
+ <button id="objToggle" type="button" title="Hide or show the contract (O)">&minus;</button>
  <div id="objective" class="panel"><b style="color:#d7b66d">CONTRACT</b><br>Take 6 gold chunks and tag 3 marked walls. Stand on a floor marker beside a marked wall and press E to start tagging it. Repeat the arrow sequence while the mine listens. Once the quota is met, bring every living crew member within a 500 × 500 pixel area around the lift to extract.<br>Your two crew members gather gold and tag walls too. They can die, and the monster can wear their faces.<br><span style="color:#9aa39a">The mine is not empty.</span></div>
  <canvas id="mini"></canvas>
   <div id="abilityHud" class="panel" style="display:none"></div>
  <div id="puzzle" class="panel"><div class="t">TAGGING · REPEAT THE SEQUENCE</div><div class="seq" id="puzzleSeq"></div><div class="bar"><i id="puzzleBar"></i></div><div class="s">WASD / arrow keys · wrong keys are loud · E to step away</div></div>
  <div id="alert"></div>
  <div id="mDead">THE MONSTER IS DEAD</div>
- <div id="hint" class="panel">WASD move · HOLD C / CTRL to crouch · SHIFT sprint · Mouse aims the lamp · E interact · 1/2 abilities</div>
+ <div id="chatLog"></div><div id="chatBox"><input id="chatIn" maxlength="120" autocomplete="off" spellcheck="false" placeholder="Message your crew, or /help for commands (Enter sends, Esc cancels)"></div>
+ <div id="hint" class="panel">WASD move · HOLD C / CTRL to crouch · SHIFT sprint · Mouse aims the lamp · E interact · 1/2 abilities · / chat · O contract · /help commands</div>
 </div>
 <div id="menu" class="overlay"><canvas id="menuFx"></canvas><div class="card">
  <div class="kicker">UNAUTHORIZED EXTRACTION / SHIFT 01</div>
@@ -600,6 +613,7 @@ let shopZoom=1,silver=0,runUpgrades={},shopOpen=false,shopReady=false,shopReadyM
 let deathKind='monster',phase='menu',paused=false,last=0,elapsed=0,noise=0,flashlightOn=true,shake=0,hintT=0,alertT=0,hbT=0,heartPulse=0,rumbleT=40,knockT=25,growlT=12,liftOpen=0,endT=0,miniT=0,exploreT=0,showMini=true,endWin=false,painting=null,prevPainting=false,fxClock=0,whT=8,breathT=0,puzzle=null,lastQuota=false,depth=1,quotaGold=6,quotaTags=3;
 let mgT=0,mgSpin=0,netMgBuf=[],netMgSeq=0,netMgSeen={},mgHitSnd=0,forestAnnounced=false;
 let rifleAnim=null,rifleReloadT=0,rifleClackT=0,netShot=null,netShotSeq=0,netShotSeen={},netShotAnim={};
+let netVfxBuf=[],netVfxSeq=0,netVfxSeen={};
 let abilityFx=[],abilityCooldowns={},abilityScanT=0,abilityScanRange=0,abilitySpeedT=0,abilitySpeedMult=1,abilityAlarmT=0,abilityHudCache='';
 let rocks=[],spores=[],battery=100,sporeAmt=0,coughT=1,rockT=3.5,bellN=0,bellFlash=0,bellPing=0,blackOn=0,blackWarn=false;
 let vents=[],quakeAmt=0,quakeWarned=false,quakePulse=0,coldShiver=0,idleT=0;
@@ -1663,6 +1677,7 @@ function netProcessFlashes(){
   if(isNetHost&&p.drill===true&&!monster.dead&&monster.state!=='possess'&&Number.isFinite(p.x)&&Number.isFinite(p.y)&&(monster.nextDrillPing||0)<=elapsed){monster.nextDrillPing=elapsed+.6;monster.state='investigate';monster.lastSeen={x:p.x,y:p.y};monster.search=Math.max(monster.search||0,4);monster.path=null}
  if(Array.isArray(p.mg)){let cnt=0;for(const b of p.mg){if(cnt>=10)break;const bn=Number(b&&b.n);if(!(bn>(netMgSeen[p.id]||0)))continue;netMgSeen[p.id]=bn;cnt++;if(b.rid!==netRoundId||b.dp!==depth)continue;const sx=+b.x,sy=+b.y,sa=+b.a;if(![sx,sy,sa].every(Number.isFinite))continue;mgFx(sx,sy,sa,MG.range,false);netShotAnim[p.id]=performance.now()-RIFLE_FIRE_AT*1000;if(isNetHost)rifleResolve(sx,sy,sa,p.id,MG)}}
  if(p.shot&&typeof p.shot==='object'){const sh=p.shot,sn=Number(sh.n);if(sn>(netShotSeen[p.id]||0)){netShotSeen[p.id]=sn;if(sh.rid===netRoundId&&sh.dp===depth){const sx=+sh.x,sy=+sh.y,sa=+sh.a;if([sx,sy,sa].every(Number.isFinite)){const range=clamp(+sh.r||900,200,1400);rifleShotFx(sx,sy,sa,range,false);netShotAnim[p.id]=performance.now()-RIFLE_FIRE_AT*1000;if(isNetHost)rifleResolve(sx,sy,sa,p.id,{range,stun:clamp(+sh.s||7,1,10),need:clamp(Math.round(+sh.nd||10),3,12),pin:clamp(+sh.pn||2,.5,3),quiet:sh.q?1:0})}}}}
+  if(Array.isArray(p.vfx)){for(const m of p.vfx){const vn=Number(m&&m.n);if(!(vn>(netVfxSeen[p.id]||0)))continue;netVfxSeen[p.id]=vn;applyVfx(m,false)}}
   if(!p.flash||typeof p.flash!=='object')continue;
   const fl=p.flash,n=Number(fl.n);if(!(n>(netFlashSeen[p.id]||0)))continue;
   netFlashSeen[p.id]=n;
@@ -1739,6 +1754,7 @@ function updateMinigun(dt){
  if(on&&!forestAnnounced&&phase==='play'){forestAnnounced=true;showAlert('FOREST IS IN THE LOBBY');say('Everyone has a minigun. HOLD LEFT CLICK or G to fire.',5)}
  if(!on){forestAnnounced=false;mgSpin=0;return}
  const nowT=performance.now();if(netMgBuf.length&&nowT-netMgBuf[netMgBuf.length-1].t>900)netMgBuf=[];
+ if(netVfxBuf.length&&nowT-netVfxBuf[0].t>2800)netVfxBuf=netVfxBuf.filter(v=>nowT-v.t<=2800);
  mgT=Math.max(0,mgT-dt);
  const want=!!(keys.mouse0||keys.g)&&player&&phase==='play'&&!paused&&!puzzle&&!isMonsterController&&netAlive&&!drill&&!((player.pitFallT||0)>0);
  mgSpin=lerp(mgSpin,want?1:0,Math.min(1,dt*(want?3.5:2)));
@@ -3461,7 +3477,11 @@ function drawMiner(x,y,ang,ph,mv,pal,o){
  ctx.fillStyle=pal.helmet;ctx.beginPath();ctx.ellipse(0,-.8,5.6,5.2,0,Math.PI*.95,Math.PI*2.05);ctx.fill();
  ctx.beginPath();ctx.ellipse(0,0,5.8,5.4,0,0,TAU);ctx.globalAlpha=.9;ctx.fill();ctx.globalAlpha=1;
  ctx.strokeStyle='rgba(0,0,0,.35)';ctx.lineWidth=.8;ctx.beginPath();ctx.moveTo(0,-5);ctx.lineTo(0,5);ctx.stroke();
- ctx.fillStyle=o.wrong?'#2b2f2b':'#f2f5d0';ctx.beginPath();ctx.arc(0,-5.4,1.7,0,TAU);ctx.fill();
+ // the little bulb on the hat: lit when the lamp is on, black when it is off
+ {const on=o.lamp!==undefined?!!o.lamp:!o.wrong;
+  if(on){ctx.save();ctx.globalCompositeOperation='lighter';const gl=ctx.createRadialGradient(0,-5.4,0,0,-5.4,5);gl.addColorStop(0,'rgba(255,246,176,.55)');gl.addColorStop(1,'rgba(255,246,176,0)');ctx.fillStyle=gl;ctx.beginPath();ctx.arc(0,-5.4,5,0,TAU);ctx.fill();ctx.restore()}
+  ctx.fillStyle=on?'#fff6b8':'#050605';ctx.beginPath();ctx.arc(0,-5.4,1.7,0,TAU);ctx.fill();
+  if(!on){ctx.strokeStyle='rgba(120,128,120,.45)';ctx.lineWidth=.5;ctx.beginPath();ctx.arc(0,-5.4,1.7,0,TAU);ctx.stroke()}}
  ctx.restore();ctx.restore();
 }
 function ik(hx,hy,fx,fy,l1,l2,bend,w){
@@ -3681,12 +3701,12 @@ function draw(){
  if((!multiplayer||phase!=='spectate')&&!isMonsterController){
  {
   const mvv=player.mv;
-  if(player.pitFallT>0){const k=clamp(player.pitFallT/.42,0,1);ctx.save();ctx.translate(player.x,player.y);ctx.scale(.28+.72*k,.28+.72*k);ctx.globalAlpha=.35+.65*k;drawMiner(0,0,player.aim,player.foot,mvv,PAL.player);ctx.restore()}else if(!player.pitGone){if(rifleCarried()){const rt=rifleAnim?rifleAnim.t:9;drawRifle(player.x,player.y,player.aim,rifleAnim?riflePose(rt):mgPose(),rifleAnim?rifleRecoil(rt):mgRecoil())}drawMiner(player.x,player.y,player.aim,player.foot,mvv,PAL.player,rifleCarried()?{noArms:true}:undefined)}
+  if(player.pitFallT>0){const k=clamp(player.pitFallT/.42,0,1);ctx.save();ctx.translate(player.x,player.y);ctx.scale(.28+.72*k,.28+.72*k);ctx.globalAlpha=.35+.65*k;drawMiner(0,0,player.aim,player.foot,mvv,PAL.player,{lamp:!!flashlightOn});ctx.restore()}else if(!player.pitGone){if(rifleCarried()){const rt=rifleAnim?rifleAnim.t:9;drawRifle(player.x,player.y,player.aim,rifleAnim?riflePose(rt):mgPose(),rifleAnim?rifleRecoil(rt):mgRecoil())}drawMiner(player.x,player.y,player.aim,player.foot,mvv,PAL.player,{noArms:rifleCarried()||undefined,lamp:!!flashlightOn})}
   if(multiplayer){ctx.save();ctx.font='10px Consolas,monospace';ctx.textAlign='center';ctx.textBaseline='bottom';ctx.fillStyle='rgba(0,0,0,.7)';ctx.fillRect(player.x-42,player.y-32,84,13);ctx.fillStyle='#d7d8bd';ctx.fillText(String(netName||'MINER').slice(0,18),player.x,player.y-22);ctx.restore()}
   // flashlight in the leading hand, or the rifle when you carry one
   if(!rifleCarried()){
   ctx.save();ctx.translate(player.x+Math.cos(player.aim)*11,player.y+Math.sin(player.aim)*11);ctx.rotate(player.aim);
-  ctx.fillStyle='#161a17';ctx.fillRect(-2,-2.2,9,4.4);ctx.fillStyle='#d3dfb4';ctx.fillRect(6.5,-2.4,2.2,4.8);ctx.restore();
+  ctx.restore();
   }
   // spray can while painting
   if(painting){const px=painting.x-player.x,py=painting.y-player.y,l=Math.hypot(px,py)||1;ctx.save();ctx.translate(player.x+px/l*16,player.y+py/l*16);ctx.rotate(Math.atan2(py,px));ctx.fillStyle='#303733';ctx.fillRect(-3,-3,7,6);ctx.fillStyle=painting.col;ctx.fillRect(4,-1.5,2.5,3);ctx.restore();
@@ -3696,7 +3716,7 @@ function draw(){
  // Remote crew members are replicated from the authoritative lobby server.
  if(multiplayer){for(const rp of netPlayers){if(rp.id===netMyId||isMonsterPlayerId(rp.id)||rp.role==='monster'||rp.alive===false||!Number.isFinite(rp.x)||!Number.isFinite(rp.y))continue;
   if(rp.rifle||forestMode()){const an=netShotAnim[rp.id],tt=an?(performance.now()-an)/1000:9;drawRifle(rp.x,rp.y,rp.aim||0,tt<.85?riflePose(tt):0,rifleRecoil(tt))}
-  drawMiner(rp.x,rp.y,rp.aim||0,fxClock*5,rp.moving?1:0,PAL.player,(rp.rifle||forestMode())?{noArms:true}:undefined);
+  drawMiner(rp.x,rp.y,rp.aim||0,fxClock*5,rp.moving?1:0,PAL.player,{noArms:(rp.rifle||forestMode())||undefined,lamp:!!rp.flashlightOn});
   ctx.save();ctx.font='10px Consolas,monospace';ctx.textAlign='center';ctx.textBaseline='bottom';ctx.fillStyle='rgba(0,0,0,.7)';ctx.fillRect(rp.x-42,rp.y-32,84,13);ctx.fillStyle='#d7d8bd';ctx.fillText(String(rp.name||'MINER').slice(0,18),rp.x,rp.y-22);ctx.restore();
  }}
  for(const l of lanterns){
@@ -4335,6 +4355,7 @@ addEventListener('mouseup',e=>{if(e.button===0)keys.mouse0=false});
 addEventListener('blur',()=>{keys.mouse0=false;keys.g=false});
 addEventListener('keydown',e=>{
  if(e.target&&(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA'))return;
+ if(e.key==='/'&&!e.repeat&&multiplayer&&(phase==='play'||phase==='spectate')&&!descentActive){e.preventDefault();chatOpen();return}
  if(descentActive){if(!e.repeat)descentSkip();e.preventDefault();return}
  const k=e.key.toLowerCase();keys[k]=true;
  if(['arrowup','arrowdown','arrowleft','arrowright',' ','tab'].includes(k))e.preventDefault();
@@ -4349,6 +4370,7 @@ addEventListener('keydown',e=>{
  }
  if(k==='p'||k==='escape')setPaused(!paused);
  if(k==='m')Snd.toggle();
+ if(k==='o'&&!e.repeat&&(phase==='play'||phase==='spectate'))objToggle();
  if(k==='l'&&!e.repeat){silver+=5000;try{Snd.clink()}catch(er){}showAlert('+5000 SILVER');say('SILVER +5000 · Total '+silver,2)}
  if(k==='b'&&!e.repeat){brightBoost=(brightBoost+1)%3;const labels=['off','mild','strong'];say('Brightness boost: '+labels[brightBoost]+' (B to cycle)',2.2);}
  if(k==='f'&&phase==='play'&&!paused&&!e.repeat){
@@ -4372,6 +4394,197 @@ canvas.addEventListener('contextmenu',e=>e.preventDefault());
 
 
 /* ---------- worldwide multiplayer ---------- */
+/* ---- multiplayer chat: rides along on the player-state packets the server already relays ---- */
+let chatSeq=Date.now(),chatOut=[],chatSeen={};
+function objSet(hide){const o=$('objective'),b=$('objToggle');if(!o||!b)return;o.classList.toggle('objHide',!!hide);b.classList.toggle('collapsed',!!hide);b.innerHTML=hide?'CONTRACT +':'&minus;';try{localStorage.setItem('deepvein_obj_hidden',hide?'1':'0')}catch(e){}}
+function objToggle(){const o=$('objective');objSet(!o.classList.contains('objHide'))}
+(function(){const b=$('objToggle');if(!b)return;b.addEventListener('click',e=>{e.stopPropagation();objToggle();b.blur()});b.addEventListener('mousedown',e=>e.stopPropagation());let h=0;try{h=localStorage.getItem('deepvein_obj_hidden')==='1'}catch(e){}objSet(h)})();
+let chatMuted=false;
+function chatLine(cls,name,text){
+ const log=$('chatLog');if(!log)return;
+ const d=document.createElement('div');d.className='cm '+cls;d.dataset.t=Date.now();
+ if(name){const b=document.createElement('b');b.textContent=name;d.appendChild(b)}
+ d.appendChild(document.createTextNode(text));
+ log.appendChild(d);while(log.children.length>60)log.removeChild(log.firstChild);
+}
+function chatAdd(name,text,me,kind){
+ if(chatMuted&&!me)return;
+ if(kind==='act')chatLine('act'+(me?' me':''),'','* '+name+' '+text);
+ else if(kind==='wh')chatLine('wh'+(me?' me':''),me?'to '+name+': ':name+' whispers: ',text);
+ else chatLine(me?'me':'',name+': ',text);
+ if(!me)try{Snd.lamp&&Snd.lamp()}catch(e){}
+}
+function chatSys(t){for(const l of String(t).split('\n'))chatLine('sys','',l);$('chatLog').classList.add('open');clearTimeout(chatSys._t);chatSys._t=setTimeout(()=>{if($('chatBox').style.display!=='block')$('chatLog').classList.remove('open')},7000)}
+function chatOpen(){const bx=$('chatBox'),inp=$('chatIn');if(!bx)return;for(const k in keys)keys[k]=false;bx.style.display='block';$('chatLog').classList.add('open');inp.value='';inp.focus()}
+function chatClose(){const bx=$('chatBox');if(bx)bx.style.display='none';$('chatLog').classList.remove('open');$('chatIn').blur()}
+const chatDone=new Set();
+function chatBroadcast(text,kind,to){
+ const m={n:++chatSeq,t:text,a:kind||undefined,to:to||undefined,at:performance.now()};chatOut.push(m);chatDone.add('me:'+m.n);
+ try{if(netSocket&&netSocket.connected)netSocket.emit('chat',{n:m.n,t:m.t,a:m.a,to:m.to,name:netName})}catch(e){}
+}
+function chatIncoming(sender,name,m){
+ if(!m||typeof m.t!=='string'||!m.n)return;
+ const key=(sender||name)+':'+m.n;if(chatDone.has(key)||chatDone.has('me:'+m.n))return;chatDone.add(key);
+ if(chatDone.size>800){const a=[...chatDone];chatDone.clear();for(const k of a.slice(-300))chatDone.add(k)}
+ const nm=String(name||'MINER').slice(0,16);
+ if(m.to){if(String(m.to).toLowerCase()!==String(netName).toLowerCase())return;chatAdd(nm,m.t.slice(0,120),false,'wh')}
+ else chatAdd(nm,m.t.slice(0,120),false,m.a==='act'?'act':undefined);
+}
+const CHAT_CONTROLS=`MOVE · WASD or arrow keys
+SPRINT · hold Shift (drains stamina)
+CROUCH · hold C or Ctrl (quiet, slower)
+AIM LAMP · move the mouse
+FLASHLIGHT · F
+INTERACT · E (lift, tags, shop terminals, spectate next player)
+SPRAY / TAG · hold left mouse or G
+ABILITIES · 1 to 5 (slot order is the order shown in the ability list)
+MAP · Tab
+BRIGHTNESS BOOST · B (off, mild, strong)
+SOUND · M
+PAUSE · P or Esc (solo only)
+CHAT · / (multiplayer)
+MONSTER PLAYER · E possess, R drop the act, F lamp while disguised
+DEBUG · L gives +5000 silver for the current run`;
+let cheat={god:0,zoom:0,ghost:0,stam:0,disco:0,potato:0};
+setInterval(()=>{
+ if(!player||phase!=='play')return;
+ if(cheat.god)player.safeT=Math.max(player.safeT||0,1.5);
+ if(cheat.zoom){abilitySpeedT=Math.max(abilitySpeedT,1);abilitySpeedMult=2.4}
+ if(cheat.ghost)noise=0;
+ if(cheat.stam){player.stamina=player.maxStamina||100;player.tired=false}
+},80);
+function cheatSay(name,txt){if(multiplayer){chatBroadcast('used /'+name+(txt?' ('+txt+')':''),'act');chatAdd(netName||'YOU','used /'+name+(txt?' ('+txt+')':''),true,'act')}}
+function pushVfx(type,data){
+ const m=Object.assign({n:++netVfxSeq,type,t:performance.now(),rid:netRoundId,dp:depth},data||{});
+ netVfxBuf.push(m);while(netVfxBuf.length>14)netVfxBuf.shift();
+ applyVfx(m,true);
+}
+function applyVfx(m,own){
+ if(!m||!m.type)return;
+ if(m.rid!=null&&Number.isFinite(netRoundId)&&m.rid!==netRoundId)return;
+ if(m.dp!=null&&m.dp!==depth)return;
+ switch(m.type){
+  case 'disco':
+   cheat.disco=m.on?1:0;canvas.style.animation=cheat.disco?'disco 2.4s linear infinite':'';
+   if(!own)chatSys(m.on?'DISCO ON · Someone flipped the mine lights.':'Disco off · the rainbow dies.');
+   break;
+  case 'potato':
+   cheat.potato=m.on?1:0;canvas.style.filter=cheat.potato?'blur(1.6px) contrast(1.35) saturate(2.4) sepia(.35)':'';
+   if(!own)chatSys(m.on?'POTATO MODE · The whole crew is on a toaster.':'Potato mode off.');
+   break;
+  case 'kaboom':
+   noise=Math.max(noise,100);shake=Math.max(shake,22);try{Snd.crash(1,0)}catch(e){}showAlert('KABOOM');
+   if(!own)chatSys('Something exploded in the dark. Loud.');
+   break;
+  case 'yell':
+   noise=Math.max(noise,100);shake=Math.max(shake,6);try{Snd.crash(.7,0)}catch(e){}
+   break;
+  case 'fart':
+   noise=Math.max(noise,100);shake=Math.max(shake,4);try{Snd.buzz()}catch(e){}
+   break;
+  case 'richall':
+   silver+=100000;try{Snd.clink()}catch(e){}showAlert('+100000 SILVER');
+   if(!own)chatSys('Someone shared a suspiciously heavy wallet. SILVER '+silver);
+   break;
+  case 'sober':
+   for(const k in cheat)cheat[k]=0;abilitySpeedT=0;canvas.style.animation='';canvas.style.filter='';
+   if(!own)chatSys('Someone sobered the mine up. Reality is cold again.');
+   break;
+ }
+}
+function cheatToggle(k,name,onMsg,offMsg){cheat[k]=cheat[k]?0:1;chatSys(cheat[k]?onMsg:offMsg);cheatSay(name,cheat[k]?'on':'off');if(k==='zoom'&&!cheat.zoom){abilitySpeedT=0}
+ if(k==='disco'){canvas.style.animation=cheat.disco?'disco 2.4s linear infinite':'';if(multiplayer)pushVfx('disco',{on:!!cheat.disco})}
+ if(k==='potato'){canvas.style.filter=cheat.potato?'blur(1.6px) contrast(1.35) saturate(2.4) sepia(.35)':'';if(multiplayer)pushVfx('potato',{on:!!cheat.potato})}}
+const CHEAT_HELP=`CHEAT COMMANDS (for fun, they announce themselves in multiplayer)
+/god · the mine cannot hurt you      /zoom · gotta go fast
+/ghost · you make no noise at all    /redbull · endless stamina
+/rich · +100000 silver (you only)    /rich all · give everyone silver
+/broke · lose it   /cash <n> · permanent cash (you only)
+/freeze · the creature stands still for 10s   /pet · pet it
+/lift · teleport to the lift         /snack · mystery sandwich
+/fart  /yell  /kaboom · very loud mistakes (synced in multiplayer)
+/disco · rainbow mine (everyone sees it)   /potato · bad graphics (everyone)
+/sing · a tune   /sober · switch every cheat off (clears shared visuals too)`;
+const CHAT_HELP=`CHAT COMMANDS (type them after pressing /)
+/help · this list      /controls · every key
+/me <text> · action    /w <name> <text> · private message
+/players · who is here /room · room code
+/depth · floor and depth  /silver · silver and cash
+/abilities · your kit  /noise · your noise level
+/gg  /rip  /shrug  /sos · quick messages
+/mute  /unmute · hide or show others' chat
+/clear · empty the chat log
+/cheats · funny cheat commands`;
+function chatCommand(raw){
+ const parts=raw.slice(1).split(' '),cmd=(parts.shift()||'').toLowerCase(),arg=parts.join(' ').trim();
+ const me=netName||'MINER';
+ const pl=()=>(netPlayers||[]).filter(p=>p&&p.id);
+ switch(cmd){
+  case 'help':case '?':case 'commands':chatSys(CHAT_HELP);break;
+  case 'controls':case 'keys':case 'binds':chatSys(CHAT_CONTROLS);break;
+  case 'me':case 'action':if(!arg){chatSys('Usage: /me <what you do>');break}chatBroadcast(arg.slice(0,100),'act');chatAdd(me,arg.slice(0,100),true,'act');break;
+  case 'w':case 'whisper':case 'msg':case 'pm':{
+   const nm=parts.shift()||'',txt=parts.join(' ').trim();
+   if(!nm||!txt){chatSys('Usage: /w <name> <message>');break}
+   const hit=pl().find(p=>p.id!==netMyId&&String(p.name||'').toLowerCase()===nm.toLowerCase())||pl().find(p=>p.id!==netMyId&&String(p.name||'').toLowerCase().startsWith(nm.toLowerCase()));
+   if(!hit){chatSys('No player called "'+nm+'" here. Try /players.');break}
+   chatBroadcast(txt.slice(0,100),'wh',String(hit.name));chatAdd(String(hit.name),txt.slice(0,100),true,'wh');break}
+  case 'players':case 'who':case 'list':{const L=pl();chatSys(L.length?'PLAYERS ('+L.length+')\n'+L.map(p=>'- '+String(p.name||'MINER')+(p.id===netMyId?' (you)':'')+(p.id===netHostId?' [host]':'')+(p.role==='monster'?' [monster]':p.alive===false?' [down]':'')).join('\n'):'No player list yet.');break}
+  case 'room':case 'code':chatSys('ROOM CODE · '+((netLobby&&netLobby.code)||'------'));break;
+  case 'depth':case 'floor':case 'level':chatSys('DEPTH '+String(depth).padStart(2,'0')+' · '+depthName()+'  ·  '+livingCrewCount()+' alive');break;
+  case 'silver':case 'money':chatSys('SILVER '+silver+' (this run) · CASH '+fmtCash(meta.cash)+' (permanent)');break;
+  case 'abilities':case 'kit':{const a=ownedAbilities();chatSys(a.length?'ABILITIES ('+a.length+'/'+abilityCap()+')\n'+a.map((x,i)=>'['+(i+1)+'] '+x.name+((abilityCooldowns[x.id]||0)>0?' · '+abilityCooldowns[x.id].toFixed(0)+'s':' · ready')).join('\n'):'No abilities yet. Buy some in the ABILITIES tree.');break}
+  case 'noise':chatSys('NOISE · '+Math.round(noise)+' / 100');break;
+  case 'gg':chatBroadcast('gg');chatAdd(me,'gg',true);break;
+  case 'rip':chatBroadcast('rip. the mine got me.');chatAdd(me,'rip. the mine got me.',true);break;
+  case 'shrug':chatBroadcast('¯\\_(ツ)_/¯');chatAdd(me,'¯\\_(ツ)_/¯',true);break;
+  case 'sos':{const m='SOS! I need help on floor '+String(depth).padStart(2,'0')+'!';chatBroadcast(m);chatAdd(me,m,true);break}
+  case 'mute':chatMuted=true;chatSys('Other players\' chat is hidden. /unmute to bring it back.');break;
+  case 'unmute':chatMuted=false;chatSys('Chat is back on.');break;
+  case 'cheats':case 'cheat':chatSys(CHEAT_HELP);break;
+  case 'god':case 'godmode':cheatToggle('god','god','GOD MODE ON · The mine files a complaint and does nothing.','God mode off. You are mortal again.');break;
+  case 'zoom':case 'speed':cheatToggle('zoom','zoom','ZOOMIES ON · Your legs have opinions.','Zoomies off.');break;
+  case 'ghost':case 'quiet':cheatToggle('ghost','ghost','GHOST ON · You could tap dance and nobody would hear.','Ghost off. Your boots are loud again.');break;
+  case 'redbull':case 'stamina':cheatToggle('stam','redbull','ENDLESS STAMINA · Your lungs are wearing a cape.','Stamina is back to normal.');break;
+  case 'disco':cheatToggle('disco','disco','DISCO ON · The mine has never looked so unsafe.','Disco off.');break;
+  case 'potato':cheatToggle('potato','potato','POTATO MODE · Rendered on a toaster.','Potato mode off.');break;
+  case 'rich':{
+   const all=arg.toLowerCase()==='all';
+   silver+=100000;try{Snd.clink()}catch(e){}showAlert('+100000 SILVER');
+   if(all&&multiplayer){
+    chatSys('You shared a suspiciously heavy wallet with the whole crew. SILVER '+silver);
+    cheatSay('rich all');pushVfx('richall',{});
+   }else{
+    chatSys('You found a suspiciously heavy wallet. SILVER '+silver+(multiplayer?' (only you — use /rich all to share)':''));
+    cheatSay('rich');
+   }
+   break}
+  case 'broke':silver=0;chatSys('A raccoon stole everything. SILVER 0.');cheatSay('broke');break;
+  case 'cash':{const n=Math.max(0,Math.min(1e7,parseInt(arg,10)||0));if(!n){chatSys('Usage: /cash <amount>');break}meta.cash+=n;saveMeta();updateMenuCash();chatSys('+'+fmtCash(n)+' permanent cash. CASH '+fmtCash(meta.cash));cheatSay('cash');break}
+  case 'freeze':{if(multiplayer&&!isNetHost){chatSys('Only the host can freeze the creature.');break}if(!monster||monster.dead){chatSys('There is nothing to freeze.');break}monster.pause=Math.max(monster.pause||0,10);monster.path=null;chatSys('FREEZE · The creature is looking at its own hand, very confused. 10 seconds.');cheatSay('freeze');break}
+  case 'pet':{if(!monster||monster.dead||!player){chatSys('Nothing to pet.');break}if(Math.hypot(monster.x-player.x,monster.y-player.y)>140){chatSys('There is nothing close enough to pet. (That is the good news.)');break}if(!multiplayer||isNetHost){monster.pause=Math.max(monster.pause||0,6);monster.path=null}chatSys('You pet the creature. It tolerates this. For now.');cheatSay('pet');break}
+  case 'lift':case 'tp':{if(!exit||!player){chatSys('No lift on this floor.');break}player.x=exit.x;player.y=exit.y+40;chatSys('You phase through the rock like it owes you money.');cheatSay('lift');break}
+  case 'snack':if(player){player.stamina=player.maxStamina||100;player.tired=false;noise=Math.max(0,noise-30)}chatSys('You eat a mystery sandwich from your pocket. It might be from last shift. Stamina restored.');cheatSay('snack');break;
+  case 'fart':noise=100;shake=Math.max(shake,4);try{Snd.buzz()}catch(e){}chatSys('You let one rip in a silent mine. Noise maxed out.');chatBroadcast('...that was me. sorry.');chatAdd(me,'...that was me. sorry.',true);cheatSay('fart');if(multiplayer)pushVfx('fart',{});break;
+  case 'yell':noise=100;shake=Math.max(shake,6);try{Snd.crash(.7,0)}catch(e){}chatSys('You scream into the dark. The dark hears you.');chatBroadcast('AAAAAAAAAAAAAA','act');chatAdd(me,'AAAAAAAAAAAAAA',true,'act');cheatSay('yell');if(multiplayer)pushVfx('yell',{});break;
+  case 'kaboom':noise=100;shake=Math.max(shake,22);try{Snd.crash(1,0)}catch(e){}showAlert('KABOOM');chatSys('You dropped a lit stick of something. It was not dynamite. It was louder.');cheatSay('kaboom');if(multiplayer)pushVfx('kaboom',{});break;
+  case 'sing':{const t=['hi ho, hi ho, it\'s off to die we go','dig dig dig, nothing here but dread','my lamp is dying and so am I, la la la','some people find gold, I find a growling noise'];const m=t[Math.floor(Math.random()*t.length)];chatBroadcast('sings: '+m,'act');chatAdd(me,'sings: '+m,true,'act');noise=Math.min(100,noise+25);break}
+  case 'sober':for(const k in cheat)cheat[k]=0;abilitySpeedT=0;canvas.style.animation='';canvas.style.filter='';chatSys('All cheats off. Reality returns, and it is cold.');if(multiplayer)pushVfx('sober',{});break;
+  case 'clear':{const l=$('chatLog');if(l)l.innerHTML='';break}
+  default:chatSys('Unknown command "/'+cmd+'". Type /help for the list.');
+ }
+}
+function chatSend(){
+ const t=$('chatIn').value.replace(/\s+/g,' ').trim().slice(0,120);chatClose();if(!t)return;
+ if(t[0]==='/'){chatCommand(t);return}
+ chatBroadcast(t);chatAdd(netName||'YOU',t,true);
+}
+function chatPayload(){const now=performance.now();chatOut=chatOut.filter(m=>now-m.at<4000);return chatOut.length?chatOut.map(m=>({n:m.n,t:m.t,a:m.a,to:m.to})):undefined}
+function chatReceive(){
+ for(const p of netPlayers){if(!p||p.id===netMyId||!Array.isArray(p.chat))continue;for(const m of p.chat)chatIncoming(p.id,p.name,m)}
+}
+setInterval(()=>{const log=$('chatLog');if(!log)return;const now=Date.now();for(const c of log.children)if(now-(+c.dataset.t)>9000)c.classList.add('old')},700);
+(function(){const i=$('chatIn');i.addEventListener('keydown',e=>{e.stopPropagation();if(e.key==='Enter'){e.preventDefault();chatSend()}else if(e.key==='Escape'){e.preventDefault();chatClose()}});i.addEventListener('keyup',e=>e.stopPropagation())})();
 let netSocket=null,multiplayer=false,netMyId=null,netName='MINER',netHostId=null,isNetHost=false;
 let netLobby=null,netPlayers=[],netSeed=1,netBotSlots=4,netAlive=true,netSpectateIndex=0;
 let netWorld={goldTaken:[],tagsDone:[],goldCount:0,tagCount:0};
@@ -4450,13 +4663,14 @@ function ensureNet(){
  netSocket.on('connect_error',()=>netMessage('Could not reach the game server. Check the server address and try again.'));
  netSocket.on('lobby-error',d=>netMessage(d&&d.message?d.message:'Unable to join that lobby.'));
  netSocket.on('lobby-update',netUpdateLobby);
+ netSocket.on('chat',d=>{if(!d||d.id===netMyId)return;chatIncoming(d.id||d.name,d.name,d)});
  netSocket.on('game-start',d=>{netHostId=d.hostId;isNetHost=netHostId===netMyId;netPlayers=d.players||[];netStartGame(d)});
  netSocket.on('players-update',d=>{
   netPlayers=d.players||[];if(d.hostId){netHostId=d.hostId;isNetHost=netHostId===netMyId}
   for(const p of netPlayers){if(p&&p.shopReady!==undefined)shopReadyMap[p.id]=!!p.shopReady}
   netCacheUps();if(shopOpen)renderShopFooter();
   syncNetworkBodies();
-  netProcessFlashes();
+  netProcessFlashes();chatReceive();
   if(isNetHost)netHostReadClients();
   netReadControllerInput();
   if(performance.now()<netIgnoreDeathUntil){netPlayers=netPlayers.map(p=>({...p,alive:true}));}
@@ -4494,7 +4708,7 @@ function netStartGame(d){
    netMonsterControllerId=pick.id;netMonsterControllerName=pick.name||'MINER';
   }
  }
- netFlash=null;netFlashSeq=0;netFlashSeen={};netShot=null;netShotSeq=0;netShotSeen={};netMgSeen={};netMgBuf=[];netMgSeq=0;netStun=null;netStunSeq=0;netStunSeen={};netIgnoreDeathUntil=performance.now()+3000;netKillGraceUntil=performance.now()+3000;netDeadSince=0;netKilledAt={};netLocalWorld=false;netMyActs=[];netDescendPending=null;netLiftUse=null;netRoundId=0;netMonsterWinPending=false;depth=1;MM=freshMM();silver=0;runUpgrades={};shopOpen=false;netUps={};netSeededSetup(netSeed);
+ netFlash=null;netFlashSeq=0;netFlashSeen={};netShot=null;netShotSeq=0;netShotSeen={};netMgSeen={};netMgBuf=[];netMgSeq=0;netVfxBuf=[];netVfxSeq=0;netVfxSeen={};netStun=null;netStunSeq=0;netStunSeen={};netIgnoreDeathUntil=performance.now()+3000;netKillGraceUntil=performance.now()+3000;netDeadSince=0;netKilledAt={};netLocalWorld=false;netMyActs=[];netDescendPending=null;netLiftUse=null;netRoundId=0;netMonsterWinPending=false;depth=1;MM=freshMM();silver=0;runUpgrades={};shopOpen=false;netUps={};netSeededSetup(netSeed);
  // Reuse the game's existing crew AI as the bot-filled player slots. Add/remove bots deterministically to exactly match the lobby.
  bots=bots.slice(0,netBotSlots);
  while(bots.length<netBotSlots){const slot=bots.length,c=floorList[(47+slot*71)%floorList.length],p={x:(c.x+.5)*TILE,y:(c.y+.5)*TILE};const names=['BOT-01','BOT-02','BOT-03','BOT-04'];bots.push({...p,r:9,alive:true,name:names[slot]||'BOT',pal:PAL.MINER,path:null,pi:0,think:0,ph:slot, gold:0,tags:0,panic:0,goal:null,paint:0,work:0,fx:0,fy:1,ang:Math.PI/2,moving:false,repath:0})}
@@ -4739,13 +4953,13 @@ function netTick(){
    const len=Math.hypot(dx,dy);if(len>0){dx/=len;dy/=len;}
    const lampOk=monster&&monster.state==='disguise'&&flashlightOn;
    const payload={x:monster?monster.x:player.x,y:monster?monster.y:player.y,aim:player.aim,mv:0,foot:0,alive:false,flashlightOn:!!lampOk,noise:0,moving:len>0,name:netName,role:'monster',
-    monsterInput:{dx,dy,aim:player.aim,sprint:!!keys.shift,possess:!!monsterPossessQueued,reveal:!!monsterRevealQueued,seq:(monsterInput.seq||0)+1,flashlightOn:!!lampOk}};
+    monsterInput:{dx,dy,aim:player.aim,sprint:!!keys.shift,possess:!!monsterPossessQueued,reveal:!!monsterRevealQueued,seq:(monsterInput.seq||0)+1,flashlightOn:!!lampOk},chat:chatPayload()};
    monsterInput.seq=payload.monsterInput.seq;
    // Consume one-shot actions after queueing
    monsterPossessQueued=false;monsterRevealQueued=false;
    netSocket.emit('player-state',payload);
   }else{
-   netSocket.emit('player-state',{x:player.x,y:player.y,aim:player.aim,mv:player.mv,foot:player.foot,alive:true,flashlightOn,noise, moving:!!(keys.w||keys.a||keys.s||keys.d||keys.arrowup||keys.arrowdown||keys.arrowleft||keys.arrowright),name:netName,liftUse:netLiftUse,flash:netFlash,stun:netStun,rifle:rifleCarried(),shot:netShot,drill:!!drill,mg:netMgBuf.length?netMgBuf:undefined,worldActs:netLocalWorld?netMyActs:undefined});
+   netSocket.emit('player-state',{x:player.x,y:player.y,aim:player.aim,mv:player.mv,foot:player.foot,alive:true,flashlightOn,noise, moving:!!(keys.w||keys.a||keys.s||keys.d||keys.arrowup||keys.arrowdown||keys.arrowleft||keys.arrowright),name:netName,liftUse:netLiftUse,flash:netFlash,stun:netStun,rifle:rifleCarried(),shot:netShot,drill:!!drill,mg:netMgBuf.length?netMgBuf:undefined,vfx:netVfxBuf.length?netVfxBuf:undefined,worldActs:netLocalWorld?netMyActs:undefined,chat:chatPayload()});
   }
  }
  if(isNetHost&&now-netLastMonsterSend>75&&(phase==='play'||phase==='spectate')){netLastMonsterSend=now;syncNetworkBodies();netSocket.emit('monster-state',netPackMonster())}
